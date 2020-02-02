@@ -7,6 +7,11 @@ In this project, more complete bytecode operations is implemented. And the struc
 
 More features for debugging bytecode is going to be implemented, because I'm trying to use this tool to fix some bugs in my own project [bytejection][bytejection].
 
+## Installation
+```bash
+$ pip install git+https://github.com/NaleRaphael/bytefall.git
+```
+
 ## Usage
 ```bash
 $ python -m bytefall [YOUR_SCRIPT.py]
