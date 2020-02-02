@@ -24,7 +24,7 @@ def get_vm_class():
     return getattr(vm, name, None)
 
 
-def get_vm(): # TODO: rename this to `get_vm`
+def get_vm():
     cls_vm = get_vm_class()
     if cls_vm is None:
         raise RuntimeError('No available version of virtual machine')

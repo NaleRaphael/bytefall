@@ -13,14 +13,14 @@ import sys
 import tokenize
 import builtins
 
-from ._utils import create_vm
+from ._utils import get_vm
 
 NoSource = Exception
 open_source = tokenize.open
 
 
 def exec_code_object(code, env):
-    vm = create_vm()
+    vm = get_vm()
     vm.run_code(code, f_globals=env)
 
 
