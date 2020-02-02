@@ -1,0 +1,26 @@
+language: python
+
+sudo: false
+
+cache:
+  directories:
+    - $HOME/.cache/pip
+  pip: true
+
+matrix:
+  include:
+  - name: "Python 3.4"
+    python: 3.4
+
+before_cache:
+  - rm -f $HOME/.cache/pip/log/debug.log
+
+before_install:
+  - python install -U pytest
+
+install:
+  - pip install .
+
+script:
+  # run all tests including those cases may take long time
+  - python -m pytest ./tests/ --runslow

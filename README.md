@@ -1,4 +1,7 @@
 # bytefall
+
+[![Build Status](https://travis-ci.com/NaleRaphael/bytefall.svg?branch=master)](https://travis-ci.com/NaleRaphael/bytefall)
+
 (This project is still WIP, but it currently works totally fine on Py34)
 
 This is a Python virtual machine implemented in pure Python for version >= Py34. It mainly derives from the following great works: [nedbat/byterun][nedbat_byterun] and [darius/tailbiter][darius_tailbiter].
