@@ -116,3 +116,12 @@ class VirtualMachinePy34(VirtualMachine):
                 arg = int_arg
             return dis.opname[opcode], (arg,)
         return dis.opname[opcode], ()
+
+
+class VirtualMachinePy35(VirtualMachinePy34):
+    ...
+
+
+class VirtualMachinePy36(VirtualMachinePy35):
+    def parse_byte_and_args(self, arg_offset=0):
+        raise NotImplementedError

@@ -52,6 +52,9 @@ class Frame(object):
     def push(self, *vals):
         self.stack.extend(vals)
 
+    def peek(self, i=0):
+        return self.stack[-1-i]
+
     def pop(self, i=0):
         return self.stack.pop(-1-i)
 

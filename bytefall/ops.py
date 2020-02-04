@@ -10,6 +10,7 @@ ref: https://github.com/darius/tailbiter
 
 from __future__ import print_function, division
 import dis, operator
+from inspect import isclass as inspect_isclass
 
 from .pycell import Cell
 from .pyframe import Frame
@@ -32,6 +33,8 @@ BINARY_OPERATORS = {
     'AND':      operator.and_,   'TRUE_DIVIDE': operator.truediv,
     'XOR':      operator.xor,    'FLOOR_DIVIDE': operator.floordiv,
     'SUBSCR':   operator.getitem,
+    # TODO: new operators in py35
+    # 'MATRIX_MULTIPLY': operator.matmul
 }
 assert all([op.__qualname__ in dir(operator) for op in BINARY_OPERATORS.values()])
 
@@ -42,6 +45,9 @@ INPLACE_OPERATORS = {
     'OR':       operator.ior,     'MODULO':   operator.imod,
     'AND':      operator.iand,    'TRUE_DIVIDE': operator.itruediv,
     'XOR':      operator.ixor,    'FLOOR_DIVIDE': operator.ifloordiv,
+    # 'SUBSCR':   operator.getitem,
+    # TODO: new operators in py35
+    # 'MATRIX_MULTIPLY': operator.imatmul
 }
 assert all([op.__qualname__ in dir(operator) for op in INPLACE_OPERATORS.values()])
 
@@ -60,24 +66,55 @@ COMPARE_OPERATORS = [
 ]
 
 
-class StaticMethodClass(type):
+class OperationClass(type):
+    """A class providing a namespace for bytecode operations."""
+    _unsupported_ops = []
+
     def __new__(cls, name, bases, local, **kwargs):
-        cls._remove_unsupported(bases, local.get('_unsupported_ops', None))
         for k, attr in local.items():
             if callable(attr) and not k.startswith('__'):
                 local[k] = staticmethod(attr)
-        instance = type.__new__(cls, name, bases, local)
-        return instance
+        new_cls = type.__new__(cls, name, bases, local)
+        cls._set_removed_ops(new_cls, local.get('_unsupported_ops', None))
+        return new_cls
 
-    def _remove_unsupported(bases, deps):
-        if deps is None:
+    def _set_removed_ops(cls_instance, names):
+        """Make operations listed in `_unsupported_ops` raise exception when
+        they are called, and it will show the version in which it was removed.
+        """
+        if names is None:
             return
+        if not all([n in dir(cls_instance) for n in names]):
+            raise ValueError('Not all names exist in %s' % (cls_instance))
+
+        def removed_op(func):
+            def wrapper(*args, **kwargs):
+                raise RuntimeError('Operation `%s` is removed in %s.'
+                    % (func.__name__, cls_instance.__name__[-4:]))
+            return wrapper
+
+        for k in names:
+            func = getattr(cls_instance, k)
+            setattr(cls_instance, k, removed_op(func))
+
+
+class Operation(metaclass=OperationClass):
+    def __dir__(self):
+        """Override this to remove operations listed in `_unsupported_ops`
+        while `dir(OperationPyXX)` is called.
+        """
+        _set = set()
+        isclass = inspect_isclass(self)
+        bases = self.__bases__ if isclass else self.__class__.__bases__
+
         for base in bases:
-            for k in deps:
-                delattr(base, k)
+            if issubclass(base, Operation):
+                _set |= set(base.__dir__(base))
+                _set -= set(getattr(self, '_unsupported_ops', []))
+            else:
+                _set |= set(dir(self))
+        return list(_set)
 
-
-class Operation(metaclass=StaticMethodClass):
     def POP_TOP(frame):
         frame.pop()
 
@@ -436,7 +473,7 @@ class Operation(metaclass=StaticMethodClass):
     def DELETE_DEREF(frame, name):
         del frame.cells[name].contents
 
-    def CALL_FUNCTION_VAR(frame, arg): # TODO: changed in py35, removed in py36
+    def CALL_FUNCTION_VAR(frame, arg):
         args = frame.pop()
         return call_function(frame, arg, args, {})
 
@@ -444,7 +481,7 @@ class Operation(metaclass=StaticMethodClass):
         kwargs = frame.pop()
         return call_function(frame, arg, [], kwargs)
 
-    def CALL_FUNCTION_VAR_KW(frame, arg): # TODO: changed in py35, removed in py36
+    def CALL_FUNCTION_VAR_KW(frame, arg):
         # https://docs.python.org/3.5/library/dis.html#opcode-CALL_FUNCTION_VAR_KW
         args, kwargs = frame.popn(2)
         return call_function(frame, arg, args, kwargs)
@@ -481,7 +518,184 @@ class OperationPy34(Operation):
     ...
 
 
-def do_raise(frame, exc, cause): # TODO: rewrite this
+class OperationPy35(OperationPy34):
+    _unsupported_ops = ['WITH_CLEANUP', 'STORE_MAP']
+
+    def GET_AITER(frame):
+        raise NotImplementedError
+
+    def GET_ANEXT(frame):
+        raise NotImplementedError
+
+    def BEFORE_ASYNC_WITH(frame):
+        raise NotImplementedError
+
+    def GET_YIELD_FROM_ITER(frame):
+        # NOTE: using `iter()` with catching `TypeError` is more reliable
+        # see also: https://stackoverflow.com/a/1952481
+        try:
+            iterable = iter(frame.pop())
+        except TypeError:
+            raise
+        frame.push(iterable)
+
+    def GET_AWAITABLE(frame):
+        raise NotImplementedError
+
+    # NOTE: implementation of `WITH_CLEANUP` is separated into
+    # `WITH_CLEANUP_START`, `WITH_CLEANUP_FINISH` since Py35
+    def WITH_CLEANUP_START(frame):
+        v = w = None
+        u = frame.top()
+        if u is None:
+            exit_func = frame.pop(1)
+        elif isinstance(u, str):
+            if u in ('return', 'continue'):
+                exit_func = frame.pop(2)
+            else:
+                exit_func = frame.pop(1)
+            u = None
+        elif issubclass(u, BaseException):
+            w, v, u = frame.popn(3)
+            tp, exc, tb = frame.popn(3)
+            exit_func = frame.pop()
+            frame.push(tp, exc, tb)
+            frame.push(None)
+            frame.push(w, v, u)
+            block = frame.pop_block()
+            assert block.type == 'except-handler'
+            frame.push_block(block.type, block.handler, block.level-1)
+        else:
+            raise VirtualMachineError("Confused WITH_CLEANUP")
+
+        exit_ret = exit_func(u, v, w)
+        frame.push(*(u, exit_ret))
+
+    def WITH_CLEANUP_FINISH(frame):
+        u, exit_ret = frame.popn(2)
+        err = (u is not None) and bool(exit_ret)
+        if err:
+            frame.push('silenced')
+
+    def BUILD_MAP(frame, size):
+        # changed in version 3.5
+        items = [frame.popn(2) for i in range(size)]
+        frame.push(dict(items))
+
+    def CALL_FUNCTION_VAR(frame, arg):
+        # NOTE: this operation is changed in py35, and will be removed in py36,
+        # but it does not affect our implementation
+        args = frame.pop()
+        return call_function(frame, arg, args, {})
+
+    def CALL_FUNCTION_KW(frame, arg):
+        kwargs = frame.pop()
+        return call_function(frame, arg, [], kwargs)
+
+    def CALL_FUNCTION_VAR_KW(frame, arg):
+        # NOTE: this operation is changed in py35, and will be removed in py36,
+        # but it does not affect our implementation
+        args, kwargs = frame.popn(2)
+        return call_function(frame, arg, args, kwargs)
+
+    def BUILD_LIST_UNPACK(frame, count):
+        # NOTE: for case like ```a = [1, 2, 3]; b = [*a]```,
+        # which is not allowed in Py34.
+        elts = frame.popn(count)
+        frame.push(*elts)
+
+    def BUILD_MAP_UNPACK(frame, count):
+        # NOTE: for case like ```a = {'a': 1, 'b': 2}; b = {**a}```,
+        # which is not allowed in Py34.
+        elts = frame.popn(count)
+        frame.push(*elts)
+
+    def BUILD_MAP_UNPACK_WITH_CALL(frame, oparg):
+        num_map, func_location = oparg & 0xff, (oparg >> 8) & 0xff
+        func = frame.peek(num_map + func_location - 1)
+        elts = frame.popn(num_map)
+        _map = {}
+        for elt in elts:
+            if not isinstance(elt, dict):
+                raise TypeError('%s() argument after ** must be a mapping, not %s'
+                    % (func.__name__, type(elt).__name__))
+            _map.update(elt)
+        frame.push(_map)
+
+    def BUILD_TUPLE_UNPACK(frame, count):
+        # NOTE: for case like ```a = (1, 2, 3); b = (*a,)```,
+        # which is not allowed in Py34.
+        elts = frame.popn(count)
+        frame.push(*elts)
+
+    def BUILD_SET_UNPACK(frame, count):
+        # NOTE: for case like ```a = {1, 2, 3}; b = {*a}```,
+        # which is not allowed in Py34.
+        elts = frame.popn(count)
+        frame.push(*elts)
+
+    def SETUP_ASYNC_WITH(frame, dest):
+        raise NotImplementedError
+
+    def UNPACK_EX(frame, oparg):
+        # NOTE: message of ValueError is modified
+        # https://github.com/python/cpython/blob/3.5/Python/ceval.c#L4288-L4296
+        argcnt, argcntafter = (oparg & 0xFF), (oparg >> 8)
+        totalargs = 1 + argcnt + argcntafter
+        seq = list(frame.pop())
+
+        if argcnt + argcntafter > len(seq):
+            raise ValueError('not enough values to unpack '
+                '(expected at least %d, got %d)' % (argcnt + argcntafter, len(seq)))
+
+        before = seq[:argcnt]
+        vals = seq[argcnt:(-argcntafter if argcntafter else None)]
+        after = seq[(-argcntafter if argcntafter else len(seq)):]
+
+        frame.push(*after[::-1])
+        frame.push(vals)
+        frame.push(*before[::-1])
+
+
+class OperationPy36(OperationPy35):
+    _unsupported_ops = [
+        'CALL_FUNCTION_VAR', 'CALL_FUNCTION_VAR_KW', 'MAKE_CLOSURE',
+    ]
+
+    def SETUP_ANNOTATIONS(frame):
+        raise NotImplementedError
+
+    def STORE_ANNOTATION(frame, namei):
+        raise NotImplementedError
+
+    def CALL_FUNCTION_EX(frame, arg):
+        varargs, kwargs = frame.popn(2)
+        return call_function(frame, arg, varargs, kwargs)
+
+    def FORMAT_VALUE(frame, flags):
+        raise NotImplementedError
+
+    def BUILD_CONST_KEY_MAP(frame, count):
+        raise NotImplementedError
+
+    def BUILD_STRING(frame, count):
+        raise NotImplementedError
+
+    def BUILD_TUPLE_UNPACK_WITH_CALL(frame, count):
+        raise NotImplementedError
+
+
+class OperationPy37(OperationPy36):
+    _unsupported_ops = ['STORE_ANNOTATION']
+
+    def LOAD_METHOD(frame, namei):
+        raise NotImplementedError
+
+    def CALL_METHOD(frame, argc):
+        raise NotImplementedError
+
+
+def do_raise(frame, exc, cause):
     if exc is None:
         exc_type, val, tb = GlobalCache().get('last_exception')
         return 'exception' if exc_type is None else 'reraise'
