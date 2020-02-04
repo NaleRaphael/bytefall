@@ -11,6 +11,8 @@ matrix:
   include:
   - name: "Python 3.4"
     python: 3.4
+  - name: "Python 3.5"
+    python: 3.5
 
 before_cache:
   - rm -f $HOME/.cache/pip/log/debug.log
