@@ -2,9 +2,8 @@
 
 from __future__ import print_function
 from . import vmtest
+from sys import version_info
 
-import six
-PY3 = six.PY3
 
 class TestWithStatement(vmtest.VmTestCase):
 
@@ -310,32 +309,42 @@ class TestWithStatement(vmtest.VmTestCase):
                 assert x == 17
             """)
 
-    if PY3:
-        def test_generator_with_context_manager(self):
-            self.assert_ok("""\
-                from contextlib import contextmanager
+    def test_generator_with_context_manager(self):
+        # NOTE: `StopIteration` for generator is deprecated from Py35
+        # see also: https://stackoverflow.com/a/46595604
+        # and: https://www.python.org/dev/peps/pep-0479/
 
-                def inner():
-                    yield "I'm inner!"
+        if version_info >= (3, 5):
+            stmt = 'return cmgr()'
+        else:
+            stmt = 'raise StopIteration(cmgr())'
 
-                def foo():
-                    yield from inner()
+        self.assert_ok("""\
+            from contextlib import contextmanager
 
-                    @contextmanager
-                    def cmgr():
-                        yield "Context Manager!"
-                    raise StopIteration(cmgr())
+            def inner():
+                yield "I'm inner!"
 
-                def main():
-                    with (yield from foo()) as x:
-                        print(x)
+            def foo():
+                yield from inner()
 
-                def run(fn, *args):
-                    x = fn(*args)
-                    while True:
-                        try:
-                            print(next(x))
-                        except StopIteration as e:
-                            return e.value
-                run(main)
-            """)
+                @contextmanager
+                def cmgr():
+                    yield "Context Manager!"
+                # raise StopIteration(cmgr())
+                # return cmgr()
+                {stmt}
+
+            def main():
+                with (yield from foo()) as x:
+                    print(x)
+
+            def run(fn, *args):
+                x = fn(*args)
+                while True:
+                    try:
+                        print(next(x))
+                    except StopIteration as e:
+                        return e.value
+            run(main)
+        """.format(stmt=stmt))

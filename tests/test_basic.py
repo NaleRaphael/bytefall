@@ -1,4 +1,6 @@
-"""Basic tests for tailbiter."""
+"""Basic tests, including cases in nedbat/byterun and
+darius/tailbiter.
+"""
 
 import pytest
 from . import vmtest

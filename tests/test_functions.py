@@ -63,16 +63,17 @@ class TestFunctions(vmtest.VmTestCase):
         #   vm_stdout: "kwargs is {'blue': False, 'red': True}"
         #   py_stdout: "kwargs is {'red': True, 'blue': False}"
         # So that we rewrite the print statement to avoid it.
+        # See also: https://www.python.org/dev/peps/pep-0468/
         from sys import version_info
 
-        if version_info > (3, 5):
-            stmt_print_kwargs = """
-                print("kwargs is %r" % (kwargs,))
-            """
-        else:
+        if version_info < (3, 6):
             stmt_print_kwargs = """
                 content = ', '.join(["%r: %r" % (k, kwargs[k]) for k in sorted(kwargs)])
                 print("kwargs is {%s}" % (content,))
+            """
+        else:
+            stmt_print_kwargs = """
+                print("kwargs is %r" % (kwargs,))
             """
 
         self.assert_ok("""\
