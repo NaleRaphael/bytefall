@@ -1,11 +1,5 @@
 """
-A pure-Python Python bytecode interpreter.
-
-Derived from the implementation of `byterun` by Ned Batchelder and
-Darius Bacon.
-
-ref: https://github.com/nedbat/byterun
-ref: https://github.com/darius/tailbiter
+Bytecode operations.
 """
 
 from __future__ import print_function, division
@@ -51,6 +45,22 @@ INPLACE_OPERATORS = {
 }
 assert all([op.__qualname__ in dir(operator) for op in INPLACE_OPERATORS.values()])
 
+
+def exception_match(x, y):
+    """Check the relation between two given exception `x`, `y`:
+    - `x` equals to `y`
+    - `x` is a subclass/instance of `y`
+
+    Note that `BaseException` should considered.
+
+    e.g. `GeneratorExit` is a subclass of `BaseException` but which is not a
+    subclass of `Exception`, and it is technically not an error.
+    """
+    return (
+        (issubclass(x, Exception) or issubclass(x, BaseException))
+        and issubclass(x, y)
+    )
+
 COMPARE_OPERATORS = [
     operator.lt,
     operator.le,
@@ -62,7 +72,7 @@ COMPARE_OPERATORS = [
     lambda x, y: x not in y,
     lambda x, y: x is y,
     lambda x, y: x is not y,
-    lambda x, y: issubclass(x, Exception) and issubclass(x, y),
+    exception_match,
 ]
 
 
