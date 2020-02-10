@@ -1,4 +1,7 @@
-import collections, types
+import collections, types, dis
+import six
+
+from .cache import GlobalCache
 from .pyframe import Frame
 from ._utils import get_vm
 
@@ -100,22 +103,157 @@ class Generator(object):
         self.gi_code = g_frame.f_code  # https://bugs.python.org/issue1473257
         self.gi_running = False
         self.gi_yieldfrom = None       # added in py35
+        self._finished = False         # for internal use only
 
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         return self.send(None)
 
-    def send(self, value=None):
-        if not self.gi_running and value is not None:
+    def send(self, value=None, exc=None):
+        if self.gi_running:
+            raise ValueError('generator already executing')
+        if self._finished:
+            raise StopIteration
+        if self.gi_frame.f_lasti == 0 and value is not None:
             raise TypeError("Can't send non-None value to a just-started generator")
         self.gi_frame.stack.append(value)
+
+        # Run frame and get returned value instantly, and `gi_running` is True
+        # only in this duration.
+        # https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L140-L142
         self.gi_running = True
+        val = None
         vm = get_vm()
-        val = vm.resume_frame(self.gi_frame)
-        if not self.gi_running:
+        try:
+            val = vm.resume_frame(self.gi_frame, exc=exc)
+        finally:
+            self.gi_running = False
+
+        # NOTE: our implementation is different from CPython here.
+        # In CPython, `gi_frame.f_stacktop` is used to check whether a generator
+        # is exhausted or not.
+        # https://github.com/python/cpython/blob/3.5/Python/ceval.c#L1191
+        # https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L152
+        if self._finished:
             raise StopIteration(val)
+
         return val
 
-    __next__ = next
+    def throw(self, exctype, val=None, tb=None):
+        if tb and not isinstance(tb, types.TracebackType):
+            raise TypeError('throw() third argument must be a traceback object')
+
+        yf = _gen_yf(self)
+        ret = None
+
+        if yf:
+            if isinstance(exctype, GeneratorExit) or issubclass(exctype, GeneratorExit):
+                self.gi_running = True
+                err = gen_close_iter(yf)
+                self.gi_running = False
+                if err < 0:
+                    try:
+                        val = self.send(None, exc=GeneratorExit)
+                    except GeneratorExit:
+                        pass
+                    return val
+                self._finished = True
+                six.reraise(exctype, val, tb)
+            if isinstance(yf, Generator):
+                self.gi_running = True
+                try:
+                    ret = self.throw(exctype, val, tb)
+                finally:
+                    self._finished = True
+                    self.gi_running = False
+            else:
+                meth = getattr(yf, 'throw', None)
+                if meth is None:
+                    self._finished = True
+                    six.reraise(exctype, val, tb)
+                self.gi_running = True
+                ret = meth(exctype, val, tb)
+                self.gi_running = False
+            if ret is None:
+                val = None
+                ret = self.gi_frame.pop()
+                assert ret == yf
+                self.gi_frame.f_lasti += 1
+                ret = self.send(val)
+            return ret
+        else:
+            GlobalCache().set('last_exception', (exctype, val, tb))
+            try:
+                val = self.send(None, exc=exctype)
+            finally:
+                self._finished = True
+            return val
+
+    def close(self):
+        # just call `gen_close` without returning value to make this API
+        # match builtin `generator.close()`
+        gen_close(self)
+
+
+def _gen_yf(gen):
+    """Get another generator object.
+
+    Corresponding impl.:
+    https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L272-L289
+    """
+    yf = None
+    f = gen.gi_frame
+    if f:
+        byte_code = f.f_code.co_code
+        op = byte_code[f.f_lasti]
+        if op != dis.opmap['YIELD_FROM']:
+            return None
+        yf = f.top()
+    return yf
+
+
+def gen_close(gen):
+    """Interal helper function to close a generator.
+
+    Corresponding impl.:
+    https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L291-L322
+    """
+    yf = _gen_yf(gen)
+    retval = None
+    err = 0
+    exc = None
+    try:
+        if yf:
+            gen.gi_running = True
+            err = gen_close_iter(yf)
+            gen.gi_running = False
+        if err == 0:
+            GlobalCache().set('last_exception', (GeneratorExit, None, None))
+            exc = GeneratorExit
+
+        retval = gen.send(None, exc=exc)
+        if retval is not None:
+            raise RuntimeError('generator ignored GeneratorExit')
+    except (StopIteration, GeneratorExit):
+        # generator is closed normally
+        gen._finished = True
+        return None
+    return -1
+
+
+def gen_close_iter(gen):
+    """Interal helper function to close a subiterator.
+
+    Corresponding impl.:
+    https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L291-L322
+    """
+    if isinstance(gen, Generator):
+        if gen_close(gen) == -1:
+            return -1
+    else:
+        meth = getattr(gen, 'close', None)
+        if (meth is not None) and (meth() is None):
+            return -1
+    return 0

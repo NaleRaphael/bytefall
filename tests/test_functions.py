@@ -494,3 +494,162 @@ class TestGenerators(vmtest.VmTestCase):
 
             list(main())
         """)
+
+    def test_generator_is_running(self):
+        self.assert_ok("""\
+            gen = (v for v in range(3))
+            assert not gen.gi_running
+            next(gen)
+            assert not gen.gi_running
+            """)
+
+    def test_generator_yield_none(self):
+        self.assert_ok("""\
+            gen = (v for v in [None]*2)
+            next(gen)
+            next(gen)
+            try:
+                next(gen)
+            except StopIteration:
+                print('Generator is exhausted')
+            """)
+
+    def test_generator_is_closed(self):
+        self.assert_ok("""\
+            gen = (v for v in range(3))
+            print(next(gen))
+            gen.close()
+            try:
+                next(gen)
+            except StopIteration:
+                print('Generator is closed')
+            """)
+
+    def test_generator_failed_to_exit(self):
+        self.assert_ok("""\
+            def make_gen():
+                while True:
+                    try:
+                        yield 1
+                    except GeneratorExit:
+                        pass
+
+            gen = make_gen()
+            next(gen)
+            gen.close()
+            next(gen)
+            """, raises=RuntimeError)
+
+    def test_generator_failed_to_exit_with_yield_from(self):
+        self.assert_ok("""\
+            def make_gen():
+                try:
+                    yield from (0, 1, 2)
+                except GeneratorExit:
+                    pass
+
+            gen = make_gen()
+            next(gen)
+            gen.close()
+            next(gen)
+            """, raises=StopIteration)
+
+
+    def test_generator_throw_exception(self):
+        self.assert_ok("""\
+            gen = (v for v in range(3))
+            print(next(gen))
+            try:
+                gen.throw(RuntimeError)
+            except RuntimeError:
+                print('Generator is terminated by RuntimeError')
+
+            try:
+                next(gen)
+            except StopIteration:
+                print('Generator is stopped')
+            """)
+
+        self.assert_ok("""\
+            gen = (v for v in range(3))
+            print(next(gen))
+            try:
+                gen.throw(GeneratorExit)
+            except GeneratorExit:
+                print('Generator is terminated by GeneratorExit')
+
+            try:
+                next(gen)
+            except StopIteration:
+                print('Generator is stopped')
+            """)
+
+    def test_generator_throw_exception_with_yield_from(self):
+        self.assert_ok("""\
+            def make_gen():
+                yield from (1,2,3,)
+
+            gen = make_gen()
+            print(next(gen))
+            try:
+                gen.throw(RuntimeError)
+            except RuntimeError:
+                print('Generator is terminated by RuntimeError')
+
+            try:
+                next(gen)
+            except StopIteration:
+                print('Generator is stopped')
+            """)
+
+        self.assert_ok("""\
+            def make_gen():
+                yield from (1,2,3,)
+
+            gen = make_gen()
+            print(next(gen))
+            try:
+                gen.throw(GeneratorExit)
+            except GeneratorExit:
+                print('Generator is terminated by GeneratorExit')
+
+            try:
+                next(gen)
+            except StopIteration:
+                print('Generator is stopped')
+            """)
+
+    def test_generator_throw_exception_with_yield_from_another_generator(self):
+        self.assert_ok("""\
+            def make_gen():
+                yield from (v for v in range(3))
+
+            gen = make_gen()
+            print(next(gen))
+            try:
+                gen.throw(RuntimeError)
+            except RuntimeError:
+                print('Generator is terminated by RuntimeError')
+
+            try:
+                next(gen)
+            except StopIteration:
+                print('Generator is stopped')
+            """)
+
+        self.assert_ok("""\
+            def make_gen():
+                yield from (v for v in range(3))
+
+            gen = make_gen()
+            print(next(gen))
+            try:
+                gen.throw(GeneratorExit)
+            except GeneratorExit:
+                print('Generator is terminated by GeneratorExit')
+
+            try:
+                next(gen)
+            except StopIteration:
+                print('Generator is stopped')
+            """)

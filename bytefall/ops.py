@@ -242,7 +242,7 @@ class Operation(metaclass=OperationClass):
     def RETURN_VALUE(frame):
         GlobalCache().set('return_value', frame.pop())
         if frame.generator:
-            frame.generator.gi_running = False
+            frame.generator._finished = True
         return 'return'
 
     def IMPORT_STAR(frame):

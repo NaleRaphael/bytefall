@@ -1,3 +1,13 @@
+"""
+A pure-Python Python bytecode interpreter.
+
+Derived from the implementation of `byterun` by Ned Batchelder and
+Darius Bacon.
+
+ref: https://github.com/nedbat/byterun
+ref: https://github.com/darius/tailbiter
+"""
+
 import dis, builtins, sys
 import six
 
@@ -39,11 +49,16 @@ class VirtualMachine(metaclass=Singleton):
         frame = Frame(code, f_globals, f_locals, None, None)
         return self.run(frame)
 
-    def run(self, frame):
+    def run(self, frame, exc=None):
         self.push_frame(frame)
         while True:
-            byte_name, arguments = self.parse_byte_and_args()
-            why = self.dispatch(byte_name, arguments)
+            if exc is not None:
+                why = 'exception'
+                exc = None
+            else:
+                byte_name, arguments = self.parse_byte_and_args()
+                why = self.dispatch(byte_name, arguments)
+
             if why == 'extended_arg':
                 # NOTE: index of argument is too big to be represented in 2 byte, so
                 # it is extended by operation `EXTENDED_ARG`
@@ -74,9 +89,9 @@ class VirtualMachine(metaclass=Singleton):
         self.frames.pop()
         self.frame = self.frames[-1] if self.frames else None
 
-    def resume_frame(self, frame):
+    def resume_frame(self, frame, exc=None):
         frame.f_back = self.frame
-        val = self.run(frame)
+        val = self.run(frame, exc=exc)
         frame.f_back = None
         return val
 
