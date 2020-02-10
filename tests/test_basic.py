@@ -374,7 +374,7 @@ class TestIt(vmtest.VmTestCase):
 
             foo()
             """.format(
-                g={}, num=num, str_vars=str_vars, var_n='var%s'%num
+                str_vars=str_vars, var_n='var%s'%num
             ), globs=g)
 
 
