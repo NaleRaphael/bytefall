@@ -8,7 +8,7 @@ from inspect import isclass as inspect_isclass
 
 from .pycell import Cell
 from .pyframe import Frame
-from .pyobj import Function, Generator
+from .pyobj import Function, Generator, CoroWrapper, _gen_yf, _coro_get_awaitable_iter
 from .exceptions import VirtualMachineError
 from .cache import GlobalCache
 from ._utils import get_vm
@@ -189,11 +189,10 @@ class Operation(metaclass=OperationClass):
         u = frame.pop()
         x = frame.top()
         try:
-            if not isinstance(x, Generator) or u is None:
-                # Call next on iterators.
-                retval = next(x)
-            else:
+            if isinstance(x, Generator) or isinstance(x, CoroWrapper):
                 retval = x.send(u)
+            else:
+                retval = next(x)
             GlobalCache().set('return_value', retval)
         except StopIteration as e:
             frame.pop()
@@ -241,6 +240,8 @@ class Operation(metaclass=OperationClass):
 
     def RETURN_VALUE(frame):
         GlobalCache().set('return_value', frame.pop())
+
+        # NOTE: this should be compatiable with `CoroWrapper`
         if frame.generator:
             frame.generator._finished = True
         return 'return'
@@ -532,10 +533,56 @@ class OperationPy35(OperationPy34):
     _unsupported_ops = ['WITH_CLEANUP', 'STORE_MAP']
 
     def GET_AITER(frame):
-        raise NotImplementedError
+        obj = frame.pop()
+        _iter = None
+        if hasattr(obj, '__aiter__'):
+            _iter = obj.__aiter__()
+            if _iter is None:
+                frame.push(None)
+                # TODO: chech whether this is a correct exception to be returned
+                raise ValueError('No asynchronous iterator availale')
+        else:
+            frame.push(None)
+            raise TypeError("'async for' requires an object with __aiter__ "
+                "method, got %s" % obj.__class__.__name__)
+
+        # NOTE: __aiter__ should return asynchronous iterators since CPython 3.5.5
+        if hasattr(_iter, '__anext__'):
+            wrapper = CoroWrapper(obj).__aiter__()
+            frame.push(wrapper)
+            return
+
+        awaitable = _coro_get_awaitable_iter(_iter)
+        if awaitable is None:
+            frame.push(None)
+            raise TypeError("'async for' received an invalid object from "
+                "__aiter__: %s" % _iter.__class__.__name__)
+        else:
+            # TODO: We didn't consider that when this warning should be converted
+            # to an error.
+            import warnings
+            warnings.warn((
+                '%s implements legacy __aiter__ protocol; __aiter__ should '
+                'return an asynchronous iterator, not awaitable'
+                ), PendingDeprecationWarning)
+            frame.push(awaitable)
 
     def GET_ANEXT(frame):
-        raise NotImplementedError
+        aiter = frame.top()
+        if hasattr(aiter, '__anext__'):
+            next_iter = aiter.__anext__()
+            if next_iter is None:
+                raise ValueError('Not a valid asynchronous iterator')
+        else:
+            raise TypeError("'async for' requires an object with __anext__ "
+                "method, got %s" % aiter.__class__.__name__)
+
+        awaitable = _coro_get_awaitable_iter(next_iter)
+        if awaitable is None:
+            raise TypeError("'async for' received an invalid object from "
+                "__anext__: %s" % next_iter.__class__.__name__)
+
+        frame.push(awaitable)
 
     def BEFORE_ASYNC_WITH(frame):
         raise NotImplementedError
@@ -544,13 +591,20 @@ class OperationPy35(OperationPy34):
         # NOTE: using `iter()` with catching `TypeError` is more reliable
         # see also: https://stackoverflow.com/a/1952481
         try:
-            iterable = iter(frame.pop())
+            iterable = iter(frame.top())
         except TypeError:
             raise
-        frame.push(iterable)
+        frame.push(iter(frame.pop()))
 
     def GET_AWAITABLE(frame):
-        raise NotImplementedError
+        val = frame.pop()
+        _iter = _coro_get_awaitable_iter(val)
+
+        if isinstance(_iter, CoroWrapper):
+            yf = _gen_yf(_iter)
+            if yf is not None:
+                raise RuntimeError('coroutine is being awaited already')
+        frame.push(_iter)
 
     # NOTE: implementation of `WITH_CLEANUP` is separated into
     # `WITH_CLEANUP_START`, `WITH_CLEANUP_FINISH` since Py35

@@ -1,5 +1,9 @@
 import collections, types, dis, inspect
+import warnings
 import six
+
+from asyncio.coroutines import CoroWrapper as _CoroWrapper
+import sys, traceback
 
 from .cache import GlobalCache
 from .pyframe import Frame
@@ -86,10 +90,15 @@ class Function(object):
         vm = get_vm()
         frame = Frame(code, self.__globals__, f_locals, self.__closure__, vm.frame)
 
-        # handling generator, CO_GENERATOR: 0x0020
+        # handling generator
         CO_GENERATOR = 0x0020
-        if self.__code__.co_flags & CO_GENERATOR:
+        CO_COROUTINE = 0x0080
+        CO_ITERABLE_COROUTINE = 0x0100
+
+        if self.__code__.co_flags & (CO_GENERATOR | CO_COROUTINE):
             gen = Generator(frame)
+            if self.__code__.co_flags & (CO_COROUTINE | CO_ITERABLE_COROUTINE):
+                gen = CoroWrapper(gen)
             frame.generator = gen
             retval = gen
         else:
@@ -197,6 +206,20 @@ class Generator(object):
         # match builtin `generator.close()`
         gen_close(self)
 
+    def __del__(self):
+        if self.gi_frame is None or self._finished:
+            return
+        if self.gi_code and gen_is_coroutine(self) and self.gi_frame.f_lasti == 0:
+            last_exception = GlobalCache().get('last_exception', None)
+            if last_exception is None:
+                warnings.warn(
+                    "coroutine '%s' was never awaited" % self.gi_code.co_name,
+                    RuntimeWarning
+                )
+        else:
+            # TODO: unraisable error will be logged here in CPython impl.
+            pass
+
 
 def match_exception(x, y):
     if not inspect.isclass(inspect):
@@ -270,3 +293,62 @@ def gen_close_iter(gen):
         if (meth is not None) and (meth() is None):
             return -1
     return 0
+
+
+def gen_is_coroutine(o):
+    # CO_ITERABLE_COROUTINE = 0x0080
+    return isinstance(o, Generator) and bool(o.gi_code.co_flags & 0x0080)
+
+def gen_is_iterable_coroutine(o):
+    # CO_ITERABLE_COROUTINE = 0x0100
+    return isinstance(o, Generator) and bool(o.gi_code.co_flags & 0x0100)
+
+
+class CoroWrapper(_CoroWrapper):
+    # We borrow the implementation from `asyncio.coroutines.CoroWrapper`,
+    # so that it will be easily to make it compatiable with the actual
+    # `asyncio` system.
+    def __init__(self, gen, func=None):
+        assert isinstance(gen, Generator)
+        self.gen = gen
+        self.func = func
+        self._source_traceback = traceback.extract_stack(sys._getframe(1))
+        self.__name__ = getattr(gen, '__name__', None)
+        self.__qualname__ = getattr(gen, '__qualname__', None)
+
+    @property
+    def _finished(self):
+        return self.gen._finished
+
+    @_finished.setter
+    def _finished(self, value):
+        self.gen._finished = value
+
+
+def _coro_get_awaitable_iter(o):
+    """Interal helper function to get an awaitable iterator.
+
+    Corresponding impl.:
+    https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L783-L823
+    """
+    if issubclass(type(o), CoroWrapper) or gen_is_iterable_coroutine(o):
+        return o
+
+    if hasattr(o, '__await__'):
+        res = o.__await__()
+        if res:
+            if isinstance(res, CoroWrapper) or gen_is_coroutine(res):
+                raise TypeError('__await__() returned a coroutine')
+            else:
+                try:
+                    iterable = iter(res)
+                except TypeError as e:
+                    raise TypeError(
+                        '__await__() returned non-iterator of type '
+                        % res.__class__.__name__
+                    ) from e
+        return res
+    else:
+        raise TypeError(
+            "object %s can't be used in 'await' expression" % o.__class__.__name__
+        )
