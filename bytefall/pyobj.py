@@ -1,4 +1,4 @@
-import collections, types, dis
+import collections, types, dis, inspect
 import six
 
 from .cache import GlobalCache
@@ -149,7 +149,8 @@ class Generator(object):
         ret = None
 
         if yf:
-            if isinstance(exctype, GeneratorExit) or issubclass(exctype, GeneratorExit):
+            # XXX: cannot make sure `exctype` is actually a type?
+            if match_exception(exctype, GeneratorExit):
                 self.gi_running = True
                 err = gen_close_iter(yf)
                 self.gi_running = False
@@ -164,7 +165,7 @@ class Generator(object):
             if isinstance(yf, Generator):
                 self.gi_running = True
                 try:
-                    ret = self.throw(exctype, val, tb)
+                    ret = yf.throw(exctype, val, tb)
                 finally:
                     self._finished = True
                     self.gi_running = False
@@ -197,6 +198,14 @@ class Generator(object):
         gen_close(self)
 
 
+def match_exception(x, y):
+    if not inspect.isclass(inspect):
+        _cls = type(x)
+    else:
+        _cls = x
+    return isinstance(_cls, y) or issubclass(_cls, y)
+
+
 def _gen_yf(gen):
     """Get another generator object.
 
@@ -205,7 +214,11 @@ def _gen_yf(gen):
     """
     yf = None
     f = gen.gi_frame
-    if f:
+
+    # XXX: `f_lasti` might exceed the length of `f_code.co_code` here, but it
+    # seems not a possible case in CPython implementation. Maybe we have to
+    # recheck it.
+    if f and f.f_lasti < len(f.f_code.co_code):
         byte_code = f.f_code.co_code
         op = byte_code[f.f_lasti]
         if op != dis.opmap['YIELD_FROM']:
