@@ -7,6 +7,7 @@ def main():
     parser = ArgumentParser(prog='bytefall')
     parser.add_argument('-m', '--module', action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('--debug', action='store_true')
     parser.add_argument('prog')
     parser.add_argument('args', nargs=REMAINDER)
 
@@ -16,7 +17,7 @@ def main():
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING)
 
     argv = [args.prog] + args.args
-    run_fn(args.prog, argv)
+    run_fn(args.prog, argv, debug=args.debug)
 
 
 if __name__ == '__main__':

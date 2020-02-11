@@ -31,3 +31,9 @@ $ python -m pytest ./tests/ --runslow
 [nedbat_byterun]: https://github.com/nedbat/byterun
 [darius_tailbiter]: https://github.com/darius/tailbiter
 [bytejection]: https://github.com/naleraphael/bytejection
+
+## Development
+- You can run `bytefall` with an argument `--debug` to get more details about the failure
+    ```bash
+    $ python -m bytefall --debug [YOUR_SCRIPT.py]
+    ```

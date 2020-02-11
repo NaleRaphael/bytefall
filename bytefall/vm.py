@@ -36,10 +36,11 @@ COLLECTION_PROCESS = {
 
 
 class VirtualMachine(metaclass=Singleton):
-    def __init__(self):
+    def __init__(self, debug=False):
         self.frames = []
         self.frame = None
         self.cls_op = get_operations()  # local lazy-import to avoid circular reference
+        self._debug = debug     # for development
 
     def run_code(self, code, f_globals=None, f_locals=None):
         if f_globals is None: f_globals = builtins.globals()
@@ -109,6 +110,8 @@ class VirtualMachine(metaclass=Singleton):
             else:
                 why = getattr(self.cls_op, byte_name)(self.frame, *arguments)
         except:
+            # raise exception directly for debugging code while developing
+            if self._debug: raise
             last_exception = sys.exc_info()[:2] + (None,)
             GlobalCache().set('last_exception', last_exception)
             why = 'exception'

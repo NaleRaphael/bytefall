@@ -19,12 +19,12 @@ NoSource = Exception
 open_source = tokenize.open
 
 
-def exec_code_object(code, env):
-    vm = get_vm()
+def exec_code_object(code, env, debug=False):
+    vm = get_vm(debug=debug)
     vm.run_code(code, f_globals=env)
 
 
-def run_python_module(modulename, args):
+def run_python_module(modulename, args, debug=False):
     """Run a python module, as though with ``python -m name args...``.
 
     `modulename` is the name of the module, possibly a dot-separated name.
@@ -70,10 +70,10 @@ def run_python_module(modulename, args):
 
     # Finally, hand the file off to run_python_file for execution.
     args[0] = pathname
-    run_python_file(pathname, args, package=packagename)
+    run_python_file(pathname, args, package=packagename, debug=debug)
 
 
-def run_python_file(filename, args, package=None):
+def run_python_file(filename, args, package=None, debug=False):
     """Run a python file as if it were the main program on the command line.
 
     `filename` is the path to the file to execute, it need not be a .py file.
@@ -115,7 +115,7 @@ def run_python_file(filename, args, package=None):
         code = compile(source, filename, 'exec')
 
         # Execute the source file.
-        exec_code_object(code, main_mod.__dict__)
+        exec_code_object(code, main_mod.__dict__, debug=debug)
     finally:
         # Restore the old __main__
         sys.modules['__main__'] = old_main_mod
