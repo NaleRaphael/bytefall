@@ -191,6 +191,7 @@ class TestWithStatement(vmtest.VmTestCase):
 
     def test_at_context_manager_simplified(self):
         self.assert_ok("""\
+            import sys
             class GeneratorContextManager(object):
                 def __init__(self, gen):
                     self.gen = gen
@@ -240,6 +241,7 @@ class TestWithStatement(vmtest.VmTestCase):
         # The complete code for an @contextmanager example, lifted from
         # the stdlib.
         self.assert_ok("""\
+            import sys
             from _functools import partial
 
             WRAPPER_ASSIGNMENTS = ('__module__', '__name__', '__doc__')
@@ -331,8 +333,6 @@ class TestWithStatement(vmtest.VmTestCase):
                 @contextmanager
                 def cmgr():
                     yield "Context Manager!"
-                # raise StopIteration(cmgr())
-                # return cmgr()
                 {stmt}
 
             def main():

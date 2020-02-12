@@ -501,6 +501,7 @@ class Operation(metaclass=OperationClass):
         ctxmgr = frame.pop()
         frame.push(ctxmgr.__exit__)
         ctxmgr_obj = ctxmgr.__enter__()
+        # NOTE: the finally block should be setup before pushing the result.
         frame.push_block('finally', dest)
         frame.push(ctxmgr_obj)
 
@@ -546,7 +547,9 @@ class OperationPy35(OperationPy34):
             raise TypeError("'async for' requires an object with __aiter__ "
                 "method, got %s" % obj.__class__.__name__)
 
-        # NOTE: __aiter__ should return asynchronous iterators since CPython 3.5.5
+        # NOTE: __aiter__ should return asynchronous iterators since CPython 3.5.2
+        # see also bpo-27243
+        # TODO: Drop support for asynchronous __aiter__ in Py37 (bpo-31709)
         if hasattr(_iter, '__anext__'):
             wrapper = CoroWrapper(obj).__aiter__()
             frame.push(wrapper)
@@ -574,7 +577,7 @@ class OperationPy35(OperationPy34):
             if next_iter is None:
                 raise ValueError('Not a valid asynchronous iterator')
         else:
-            raise TypeError("'async for' requires an object with __anext__ "
+            raise TypeError("'async for' requires an iterator with __anext__ "
                 "method, got %s" % aiter.__class__.__name__)
 
         awaitable = _coro_get_awaitable_iter(next_iter)
@@ -585,7 +588,10 @@ class OperationPy35(OperationPy34):
         frame.push(awaitable)
 
     def BEFORE_ASYNC_WITH(frame):
-        raise NotImplementedError
+        ctxmgr = frame.pop()
+        frame.push(ctxmgr.__aexit__)
+        ctxmgr_obj = ctxmgr.__aenter__()
+        frame.push(ctxmgr_obj)
 
     def GET_YIELD_FROM_ITER(frame):
         # NOTE: using `iter()` with catching `TypeError` is more reliable
@@ -699,7 +705,9 @@ class OperationPy35(OperationPy34):
         frame.push(*elts)
 
     def SETUP_ASYNC_WITH(frame, dest):
-        raise NotImplementedError
+        res = frame.pop()   # this affect the offset of block to be pushed
+        frame.push_block('finally', dest)
+        frame.push(res)
 
     def UNPACK_EX(frame, oparg):
         # NOTE: message of ValueError is modified
