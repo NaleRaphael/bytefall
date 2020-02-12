@@ -384,6 +384,14 @@ class Operation(metaclass=OperationClass):
     def IMPORT_NAME(frame, name):
         level, fromlist = frame.popn(2)
         val = __import__(name, frame.f_globals, frame.f_locals, fromlist, level)
+
+        # XXX: In order to make the decorator `asyncio.coroutine` works normally
+        # in our virtual machine, replace it with our implementation.
+        if name == 'asyncio':
+            from .pyobj import coroutine
+            val.coroutine = coroutine
+            val.coroutines.coroutine = coroutine
+
         frame.push(val)
 
     def IMPORT_FROM(frame, name):

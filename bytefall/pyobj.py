@@ -352,3 +352,74 @@ def _coro_get_awaitable_iter(o):
         raise TypeError(
             "object %s can't be used in 'await' expression" % o.__class__.__name__
         )
+
+
+from asyncio import futures
+from asyncio.coroutines import _DEBUG, _CoroutineABC, _AwaitableABC
+import functools, os
+
+# ----- Additional settings for coroutine in Py34
+try:
+    _types_coroutine = types.coroutine
+    _types_CoroutineType = types.CoroutineType
+except AttributeError:
+    # Python 3.4
+    _types_coroutine = None
+    _types_CoroutineType = None
+
+_is_coroutine = object()
+
+
+def isfuture(obj):
+    return (hasattr(obj.__class__, '_asyncio_future_blocking') and
+            obj._asyncio_future_blocking is not None)
+
+
+def coroutine(func):
+    """A decorator to mark coroutines, and this implementation is modified
+    from `asyncio.coroutines.coroutine`.
+
+    The reason why this should be done is that the implementation of
+    `asyncio.coroutine` relies on native types and functions (e.g.
+    types.GeneratorType, inspect.isgeneratorfunction, ...). However, some
+    of those native types and functions are re-implemented by us to run in
+    virtual machine. Therefore, this should be used to replace the original
+    one to make `@asyncio.coroutine` work.
+    """
+    # Return directly if given function is a coroutine.
+    if func.__code__.co_flags & 0x0080:
+        return func
+
+    if isinstance(func, Generator):
+        coro = func
+    else:
+        @functools.wraps(func)
+        def coro(*args, **kw):
+            res = func(*args, **kw)
+            if (isfuture(res) or isinstance(res, Generator) or
+                isinstance(res, CoroWrapper)):
+                res = yield from res
+            elif _AwaitableABC is not None:
+                try:
+                    await_meth = res.__await__
+                except AttributeError:
+                    pass
+                else:
+                    if isinstance(res, _AwaitableABC):
+                        res = yield from await_meth()
+            return res
+
+    if not _DEBUG:
+        wrapper = coro
+    else:
+        @functools.wraps(func)
+        def wrapper(*args, **kwds):
+            w = CoroWrapper(coro(*args, **kwds), func=func)
+            if w._source_traceback:
+                del w._source_traceback[-1]
+            w.__name__ = getattr(func, '__name__', None)
+            w.__qualname__ = getattr(func, '__qualname__', None)
+            return w
+
+    wrapper._is_coroutine = _is_coroutine  # For iscoroutinefunction().
+    return wrapper

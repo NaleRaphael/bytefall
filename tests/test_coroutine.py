@@ -6,9 +6,11 @@ import pytest
 from . import vmtest
 
 
-@pytest.mark.skip(reason='run these tests until issues of importing '
-    '`asyncio.coroutine` is resolved')
 class TestCoroutine(vmtest.VmTestCase):
+    @pytest.mark.skip(reason='this case works while running it as a script, '
+    'but it will fail in test runner currently. Cause of failure is that '
+    '`asyncio.coroutine` was patched while running this case in vm, but it '
+    'was not restored after that.')
     def test_run_awaitable_object(self):
         # py34, generator-based coroutine
         # which will be removed in CPython 3.10
@@ -34,6 +36,6 @@ class TestCoroutine(vmtest.VmTestCase):
             import asyncio
             @asyncio.coroutine
             def foo():
-                await 1
+                return 1
             foo()
             """)
