@@ -370,11 +370,13 @@ class TestIt(vmtest.VmTestCase):
         self.assert_ok("""\
             def foo():
                 {str_vars}
-                print({var_n})
+                return {var_n}
 
-            foo()
+            retval = foo()
+            print(retval)
+            assert retval == {result}
             """.format(
-                str_vars=str_vars, var_n='var%s'%num
+                str_vars=str_vars, var_n='var%s'%(num-1), result=num-1
             ), globs=g)
 
 

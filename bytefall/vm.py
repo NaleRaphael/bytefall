@@ -65,6 +65,8 @@ class VirtualMachine(metaclass=Singleton):
                 # it is extended by operation `EXTENDED_ARG`
                 arg_offset = GlobalCache().pop('oparg')
                 byte_name, arguments = self.parse_byte_and_args(arg_offset=arg_offset)
+                why = self.dispatch(byte_name, arguments)
+                continue
             if why == 'exception':
                 # TODO: ceval calls PyTraceBack_Here, not sure what that does.
                 pass
