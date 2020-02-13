@@ -468,8 +468,10 @@ class Operation(metaclass=OperationClass):
         return call_function(frame, arg, [], {})
 
     def MAKE_FUNCTION(frame, argc):
-        *defaults, code, name = frame.popn(2+argc)
-        frame.push(Function(code, frame.f_globals, name, defaults, None))
+        code, name = frame.popn(2)
+        func = Function(code, frame.f_globals, name, None, None)
+        func = _setup_function(frame, argc, func)
+        frame.push(func)
 
     def BUILD_SLICE(frame, count):
         if count != 2 or count != 3:
@@ -477,8 +479,10 @@ class Operation(metaclass=OperationClass):
         frame.push(slice(*frame.stack.popn(count)))
 
     def MAKE_CLOSURE(frame, argc):
-        *defaults, closure, code, name = frame.popn(3+argc)
-        frame.push(Function(code, frame.f_globals, name, defaults, closure))
+        closure, code, name = frame.popn(3)
+        func = Function(code, frame.f_globals, name, None, closure)
+        func = _setup_function(frame, argc, func)
+        frame.push(func)
 
     def LOAD_CLOSURE(frame, name):
         frame.push(frame.cells[name])
@@ -748,6 +752,17 @@ class OperationPy36(OperationPy35):
     def STORE_ANNOTATION(frame, namei):
         raise NotImplementedError
 
+    def MAKE_FUNCTION(frame, oparg):
+        # NOTE: Operation `MAKE_CLOSURE` is removed since Py36, and the
+        # implementation of it is merged into this operation.
+        code, name = frame.popn(2)
+        func = Function(code, frame.f_globals, name, (), None)
+        if oparg & 0x08: func.__closure__ = frame.pop()
+        if oparg & 0x04: func.__annotations__ = frame.pop()
+        if oparg & 0x02: func.__kwdefaults__ = frame.pop()
+        if oparg & 0x01: func.__defaults__ = frame.pop()
+        frame.push(func)
+
     def CALL_FUNCTION_EX(frame, arg):
         varargs, kwargs = frame.popn(2)
         return call_function(frame, arg, varargs, kwargs)
@@ -799,6 +814,37 @@ def do_raise(frame, exc, cause):
     return 'exception'
 
 
+def _setup_function(frame, argc, func):
+    """A helper function to setup __annotations__, __defaults__,
+    __kwdefaults__ of `Function` object for CPython < 3.5 only.
+
+    (Because implementation of `MAKE_FUNCTION` is changed since CPython 3.6)
+    """
+    num_posdefs = argc & 0xff
+    num_kwdefs = (argc>>8) & 0xff
+    num_annos = (argc>>16) & 0x7fff
+
+    annos = {}
+    if num_annos > 0:
+        anno_names = frame.pop()
+        anno_vals = frame.popn(len(anno_names))
+        annos = dict(zip(anno_names, anno_vals))
+    func.__annotations__ = annos
+
+    kwdefs = {}
+    if num_kwdefs > 0:
+        elts = frame.popn(num_kwdefs*2)
+        keys = elts[::2]
+        vals = elts[1::2]
+        kwdefs = dict(zip(keys, vals))
+    func.__kwdefaults__ = kwdefs
+
+    posdefs = ()
+    if num_posdefs > 0:
+        func.__defaults__ = tuple(frame.popn(num_posdefs))
+    return func
+
+
 def call_function(frame, oparg, varargs, kwargs):
     len_kw, len_pos = divmod(oparg, 256)
     namedargs = dict([frame.popn(2) for i in range(len_kw)])
@@ -806,6 +852,20 @@ def call_function(frame, oparg, varargs, kwargs):
     posargs = frame.popn(len_pos)
     posargs.extend(varargs)
     func = frame.pop()
+
+    # XXX: This is a temporary workaround to skip checking on some builtin
+    # functions which may lack `__name__`, e.g. `functools.partial`.
+    if hasattr(func, '__name__'):
+        # XXX: Calling `locals()` and `globals()` in the script to be executed
+        # by virtual machine will return the actual information of the frame
+        # executed by host runtime. To simulate the execution in the virtual
+        # machine, we have to return the information of the frame we got here.
+        if func.__name__ == 'locals':
+            frame.push(frame.f_locals)
+            return
+        elif func.__name__ == 'globals':
+            frame.push(frame.f_globals)
+            return
     frame.push(func(*posargs, **namedargs))
 
 

@@ -27,7 +27,7 @@ class Method(object):
 class Function(object):
     __slots__ = [
         '__name__', '__code__', '__globals__', '__defaults__', '__closure__',
-        '__dict__', '__doc__',
+        '__dict__', '__doc__', '__annotations__', '__kwdefaults__',
     ]
     def __init__(self, code, globs, name, defaults, closure):
         # NOTE: order of arguments is modified to fit the implementation of builtin
@@ -37,9 +37,11 @@ class Function(object):
         self.__name__ = name or code.co_name
         self.__code__ = code
         self.__globals__ = globs
-        self.__defaults__ = tuple(defaults)
+        self.__defaults__ = None if defaults is None else tuple(defaults)
+        self.__kwdefaults__ = {}
         self.__closure__ = closure
         self.__doc__ = code.co_consts[0] if code.co_consts else None
+        self.__annotations__ = {}
         # self.__qualname__ = None  # TODO: impl this
 
     def __repr__(self):
@@ -51,25 +53,39 @@ class Function(object):
     def __call__(self, *args, **kwargs):
         code = self.__code__
         argc = code.co_argcount
-        # NOTE: co_flags:
-        # https://github.com/python/cpython/blob/3.4/Include/code.h#L53-L59
+        kwargc = code.co_kwonlyargcount
+        # posargc = code.co_posonlyargcount     # TODO: new in Py38
+
+        # NOTE: For both argc, function signature should be either:
+        #   ```def fn(x=1, y=2): ...```, where posargc is 2, kwargc is 0
+        #   ```def fn(*, x=1, y=2): ...```, where posargc is 0, kwargc is 2
+        #   It is impossible that both kwargc and posargc are not 0.
+        # assert kwargc ^ posargc == (kwargc + posargc), \
+        #     "at least one of `kwargc` or `posargc` should be 0"
+
         varargs = 0 != (code.co_flags & 0x04)   # CO_VARARGS: 0x0004
         varkws = 0 != (code.co_flags & 0x08)    # CO_VARKEYWORDS: 0x0008
-        params = code.co_varnames[:argc+varargs+varkws]
+        params = code.co_varnames[:argc+kwargc+varargs+varkws]
 
-        defaults = self.__defaults__
+        defaults = self.__defaults__ if self.__defaults__ else ()
+        kwdefaults = self.__kwdefaults__
         nrequired = -(len(defaults)+int(varkws)) if defaults else argc
 
         f_locals = dict(zip(params[nrequired:], defaults))
+        f_locals.update(kwdefaults)
         f_locals.update(dict(zip(params, args)))
         if varargs:
-            # for the case: ```def foo(a, b, *args): ...```
+            # for the case: ```def foo(*args): ...```
             f_locals[params[argc]] = args[argc:]
         elif argc < len(args):
-            raise TypeError('%s() takes up to %d positional argument(s) but got %d'
-                            % (self.__name__, argc, len(args)))
+            raise TypeError(
+                    '%s() takes %d positional arguments but %d %s given'
+                    % (self.__name__, argc,
+                       len(args), 'was' if len(args) == 1 else 'were')
+                )
 
         if varkws:
+            # for the case: ```def foo(**kwargs): ... ```
             f_locals[params[-1]] = varkw_dict = {}
         for kw, value in kwargs.items():
             if kw in params:

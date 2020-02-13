@@ -112,6 +112,32 @@ class TestFunctions(vmtest.VmTestCase):
             fn()
             """)
 
+    def test_defining_position_only_arguments_function(self):
+        self.assert_ok("""\
+            def fn(x=1, y=2):
+                print('x is %r, y is %r' % (x, y))
+                return (x, y)
+            assert fn() == (1, 2)
+            assert fn(3, 4) == (3, 4)
+            assert fn(x=4, y=3) == (4, 3)
+        """)
+
+    def test_defining_keyword_only_arguments_function(self):
+        self.assert_ok("""\
+            def fn(*, x=1, y=2):
+                print('x is %r, y is %r' % (x, y))
+                return (x, y)
+            assert fn() == (1, 2)
+            assert fn(x=4, y=3) == (4, 3)
+        """)
+
+        self.assert_ok("""\
+            def fn(*, x=1, y=2):
+                print('x is %r, y is %r' % (x, y))
+                return (x, y)
+            fn(4, 3)
+        """, raises=TypeError)
+
     def test_partial(self):
         self.assert_ok("""\
             from _functools import partial
@@ -262,7 +288,7 @@ class TestClosures(vmtest.VmTestCase):
             assert (fns[0](), fns[1](), fns[2]()) == (0, 1, 2)
             """)
 
-    def test_closures_with_defaults(self): 
+    def test_closures_with_defaults(self):
         self.assert_ok("""\
             def make_adder(x, y=13, z=43):
                 def add(q, r=11):
@@ -319,6 +345,64 @@ class TestClosures(vmtest.VmTestCase):
                 return lambda: kws['y']
             print(f(y=183)())
             """)
+
+
+class TestAnnotations(vmtest.VmTestCase):
+    def test_function_with_simple_annotations(self):
+        self.assert_ok("""\
+            def fn(x: int, y: int=13, z=43) -> tuple:
+                return (x, y, z)
+            assert fn(10, 17) == (10, 17, 43)
+            """)
+
+    def test_function_with_annotations_for_validation_simple_1(self):
+        self.assert_ok("""\
+            def validate(func, _locals):
+                def make_type_checker(tp=None):
+                    def checker(x):
+                        return isinstance(x, tp)
+                    return checker
+
+                for key, anno in func.__annotations__.items():
+                    value = _locals[key]
+                    test = anno if hasattr(anno, '__call__') else make_type_checker(anno)
+                    if not test(value):
+                        raise TypeError('check is failed for argument `%s`' % key)
+
+            def is_int(x):
+                return isinstance(x, int)
+
+            def adder(x: int, y: is_int):
+                validate(adder, locals())
+                return x+y
+
+            assert adder(1, 2) == 3
+            """)
+
+    def test_function_with_annotations_for_validation_simple_2(self):
+        self.assert_ok("""\
+            def validate(func, _locals):
+                def make_type_checker(tp=None):
+                    def checker(x):
+                        return isinstance(x, tp)
+                    return checker
+
+                for key, anno in func.__annotations__.items():
+                    value = _locals[key]
+                    test = anno if hasattr(anno, '__call__') else make_type_checker(anno)
+                    if not test(value):
+                        raise TypeError('check is failed for argument `%s`' % key)
+
+            def is_int(x):
+                return isinstance(x, int)
+
+            def adder(x: int, y: is_int):
+                validate(adder, locals())
+                return x+y
+
+            adder(1, 'evil')    # should raise a TypeError
+            """, raises=TypeError)
+
 
 class TestGenerators(vmtest.VmTestCase):
     def test_first(self):
