@@ -351,7 +351,9 @@ class TestAnnotations(vmtest.VmTestCase):
     def test_function_with_simple_annotations(self):
         self.assert_ok("""\
             def fn(x: int, y: int=13, z=43) -> tuple:
-                return (x, y, z)
+                retval = (x, y, z)
+                print(retval)
+                return retval
             assert fn(10, 17) == (10, 17, 43)
             """)
 

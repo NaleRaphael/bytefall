@@ -534,7 +534,7 @@ class Operation(metaclass=OperationClass):
         frame.push(frame.cells[name].contents)
 
     def EXTENDED_ARG(frame, count):
-        GlobalCache().set('oparg', 1 << 16)
+        GlobalCache().set('oparg', count << 16)
         return 'extended_arg'
 
 
