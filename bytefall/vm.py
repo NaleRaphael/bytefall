@@ -52,11 +52,12 @@ class VirtualMachine(metaclass=Singleton):
 
     def run(self, frame, exc=None):
         self.push_frame(frame)
+        why = None
         while True:
             if exc is not None:
                 why = 'exception'
                 exc = None
-            else:
+            elif why is None:
                 byte_name, arguments = self.parse_byte_and_args()
                 why = self.dispatch(byte_name, arguments)
 
