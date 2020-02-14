@@ -143,6 +143,20 @@ class VirtualMachinePy35(VirtualMachinePy34):
     ...
 
 
-class VirtualMachinePy36(VirtualMachinePy35):
+class VirtualMachinePy36(VirtualMachine):
     def parse_byte_and_args(self, arg_offset=0):
-        raise NotImplementedError
+        f = self.frame
+        code = f.f_code
+        opcode, int_arg = code.co_code[f.f_lasti:f.f_lasti+2]
+        int_arg |= arg_offset
+        f.f_lasti += 2
+
+        if opcode >= dis.HAVE_ARGUMENT:
+            collection_type = SPECIAL_OPCODE.get(opcode, None)
+            if collection_type and collection_type in COLLECTION_PROCESS:
+                arg = COLLECTION_PROCESS[collection_type](f, code, int_arg)
+            else:
+                arg = int_arg
+            return dis.opname[opcode], (arg,)
+
+        return dis.opname[opcode], ()

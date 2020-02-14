@@ -75,6 +75,10 @@ COMPARE_OPERATORS = [
     exception_match,
 ]
 
+# Unit of bytecode is changed into 2 bytes since Py36
+from sys import version_info
+CODE_UNIT = 1 if version_info < (3, 6) else 2
+
 
 class OperationClass(type):
     """A class providing a namespace for bytecode operations."""
@@ -200,7 +204,7 @@ class Operation(metaclass=OperationClass):
         else:
             # YIELD_FROM decrements f_lasti, so that it will be called
             # repeatedly until a StopIteration is raised.
-            frame.jump(frame.f_lasti - 1)
+            frame.jump(frame.f_lasti - CODE_UNIT)
             # Returning 'yield' prevents the block stack cleanup code
             # from executing, suspending the frame in its current state.
             return 'yield'
@@ -763,21 +767,65 @@ class OperationPy36(OperationPy35):
         if oparg & 0x01: func.__defaults__ = frame.pop()
         frame.push(func)
 
-    def CALL_FUNCTION_EX(frame, arg):
-        varargs, kwargs = frame.popn(2)
-        return call_function(frame, arg, varargs, kwargs)
+    def CALL_FUNCTION_KW(frame, oparg):
+        kwnames = frame.pop()
+        nkwargs = len(kwnames)
+        nargs = oparg - nkwargs
+        kwvals = frame.popn(nkwargs)
+        namedargs = dict(zip(kwnames, kwvals))
+        posargs = frame.popn(nargs)
+        func = frame.pop()
+
+        fn = getattr(func, '__name__', None)
+        if fn == 'locals':
+            frame.push(frame.f_locals)
+        elif fn == 'globals':
+            frame.push(frame.f_globals)
+        else:
+            frame.push(func(*posargs, **namedargs))
+
+    def CALL_FUNCTION_EX(frame, oparg):
+        kwargs = frame.pop() if oparg & 0x01 else {}
+        posargs = frame.pop()
+        func = frame.pop()
+        retval = func(*posargs, **kwargs)
+        frame.push(retval)
 
     def FORMAT_VALUE(frame, flags):
         raise NotImplementedError
 
     def BUILD_CONST_KEY_MAP(frame, count):
-        raise NotImplementedError
+        keys = frame.pop()
+        if len(keys) != count:
+            raise SystemError('bad BUILD_CONST_KEY_MAP keys argument')
+        vals = frame.popn(count)
+        key_map = dict(zip(keys, vals))
+        frame.push(key_map)
 
     def BUILD_STRING(frame, count):
         raise NotImplementedError
 
     def BUILD_TUPLE_UNPACK_WITH_CALL(frame, count):
-        raise NotImplementedError
+        vals = []
+        for v in frame.popn(count):
+            vals.extend(v)
+        frame.push(tuple(vals))
+
+    def BUILD_MAP_UNPACK_WITH_CALL(frame, oparg):
+        num_map = oparg
+        func = frame.peek(1 + oparg)    # XXX: in CPython: PEEK(2 + oparg)
+        elts = frame.popn(oparg)
+        _map = {}
+        for elt in elts:
+            if not isinstance(elt, dict):
+                raise TypeError('%s() argument after ** must be a mapping, not %s'
+                    % (func.__name__, type(elt).__name__))
+            _map.update(elt)
+        frame.push(_map)
+
+    def EXTENDED_ARG(frame, count):
+        GlobalCache().set('oparg', count << 8)
+        return 'extended_arg'
 
 
 class OperationPy37(OperationPy36):
@@ -855,18 +903,17 @@ def call_function(frame, oparg, varargs, kwargs):
 
     # XXX: This is a temporary workaround to skip checking on some builtin
     # functions which may lack `__name__`, e.g. `functools.partial`.
-    if hasattr(func, '__name__'):
-        # XXX: Calling `locals()` and `globals()` in the script to be executed
-        # by virtual machine will return the actual information of the frame
-        # executed by host runtime. To simulate the execution in the virtual
-        # machine, we have to return the information of the frame we got here.
-        if func.__name__ == 'locals':
-            frame.push(frame.f_locals)
-            return
-        elif func.__name__ == 'globals':
-            frame.push(frame.f_globals)
-            return
-    frame.push(func(*posargs, **namedargs))
+    # XXX: Calling `locals()` and `globals()` in the script to be executed
+    # by virtual machine will return the actual information of the frame
+    # executed by host runtime. To simulate the execution in the virtual
+    # machine, we have to return the information of the frame we got here.
+    fn = getattr(func, '__name__', None)
+    if fn == 'locals':
+        frame.push(frame.f_locals)
+    elif fn == 'globals':
+        frame.push(frame.f_globals)
+    else:
+        frame.push(func(*posargs, **namedargs))
 
 
 def build_class(func, name, *bases, **kwds):
