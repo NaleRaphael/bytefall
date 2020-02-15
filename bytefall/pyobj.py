@@ -34,7 +34,7 @@ class Function(object):
         # `function` class:
         # https://github.com/python/cpython/blob/3.4/Objects/funcobject.c#L476-L477
         self.__dict__ = {}
-        self.__name__ = name or code.co_name
+        self.__name__ = code.co_name
         self.__code__ = code
         self.__globals__ = globs
         self.__defaults__ = None if defaults is None else tuple(defaults)
@@ -42,10 +42,10 @@ class Function(object):
         self.__closure__ = closure
         self.__doc__ = code.co_consts[0] if code.co_consts else None
         self.__annotations__ = {}
-        # self.__qualname__ = None  # TODO: impl this
+        self.__qualname__ = name
 
     def __repr__(self):
-        return '<Function %s at 0x%08x>' % (self.__name__, id(self))
+        return '<Function %s at 0x%016X>' % (self.__qualname__, id(self))
 
     def __get__(self, instance, owner):
         return self if instance is None else Method(instance, owner, self)
