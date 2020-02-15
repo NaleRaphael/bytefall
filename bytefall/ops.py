@@ -751,10 +751,19 @@ class OperationPy36(OperationPy35):
     ]
 
     def SETUP_ANNOTATIONS(frame):
-        raise NotImplementedError
+        if frame.f_locals is None:
+            raise SystemError('no locals found when setting up annotations')
+        if '__annotations__' not in frame.f_locals:
+            frame.f_locals['__annotations__'] = {}
 
     def STORE_ANNOTATION(frame, namei):
-        raise NotImplementedError
+        if frame.f_locals is None:
+            raise SystemError('no locals found when setting up annotations')
+
+        anno_dict = frame.f_locals.get('__annotations__', None)
+        if anno_dict is None:
+            raise NameError('__annotations__ not found')
+        anno_dict[namei] = frame.pop()
 
     def MAKE_FUNCTION(frame, oparg):
         # NOTE: Operation `MAKE_CLOSURE` is removed since Py36, and the
