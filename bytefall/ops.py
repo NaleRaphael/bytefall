@@ -745,6 +745,17 @@ class OperationPy35(OperationPy34):
         frame.push(*before[::-1])
 
 
+# Mask and values used by FORMAT_VALUE conversion
+# https://github.com/python/cpython/blob/3.6/Include/ceval.h#L226-L233
+FVC_MAP = {
+    0: None,  # FVC_NONE
+    1: str,  # FVC_STR
+    2: repr,  # FVC_REPR
+    3: ascii,  # FVC_ASCII
+}
+FVC_MASK = 0x3
+FVS_HAVE_SPEC = 0x4
+
 class OperationPy36(OperationPy35):
     _unsupported_ops = [
         'CALL_FUNCTION_VAR', 'CALL_FUNCTION_VAR_KW', 'MAKE_CLOSURE',
@@ -801,7 +812,22 @@ class OperationPy36(OperationPy35):
         frame.push(retval)
 
     def FORMAT_VALUE(frame, flags):
-        raise NotImplementedError
+        # FVC_MASK: 0x3, for chosing conversion function
+        # FVS_MASK: 0x4, check whether string should be formatted, e.g. f'{x:.4f}'
+        which_conversion = flags & 0x3
+        have_fmt_spec = (flags & 0x4) == FVS_HAVE_SPEC
+        fmt_spec = frame.pop() if have_fmt_spec else None
+        value = frame.pop()
+        conv_fn = FVC_MAP.get(which_conversion, None)
+
+        if conv_fn:
+            result = conv_fn(value)
+            value = result
+        if fmt_spec is None:
+            result = value
+        else:
+            result = format(value, fmt_spec)
+        frame.push(result)
 
     def BUILD_CONST_KEY_MAP(frame, count):
         keys = frame.pop()
@@ -812,7 +838,7 @@ class OperationPy36(OperationPy35):
         frame.push(key_map)
 
     def BUILD_STRING(frame, count):
-        raise NotImplementedError
+        frame.push(''.join(frame.popn(count)))
 
     def BUILD_TUPLE_UNPACK_WITH_CALL(frame, count):
         vals = []

@@ -36,3 +36,51 @@ class TestClassAnnotations(vmtest.VmTestCase):
 
             print(Foo().fn())
             """)
+
+
+class TestFString(vmtest.VmTestCase):
+    def test_simple_f_string(self):
+        self.assert_ok("""\
+            who = 'world'
+            print(f'hello {who}')
+            """)
+
+    def test_print_object(self):
+        self.assert_ok("""\
+            class ChaoticNeutralObject(object):
+                def __str__(self):
+                    return "I'm totally neutral"
+                def __repr__(self):
+                    return "s​a​s​a​g​e​y​o"
+
+            obj = ChaoticNeutralObject()
+
+            print(f'{obj}')
+            print(f'{obj!s}')
+            print(f'{obj!r}')
+            print(f'{obj!a}')
+            """)
+
+    def test_digit_format(self):
+        self.assert_ok("""\
+            value = 1.23456
+            print(f'{value:.4f}')
+            """)
+
+    def test_call_function_in_f_string(self):
+        self.assert_ok("""\
+            def fn():
+                return 'wow'
+
+            print(f'{fn()}')
+            """)
+
+    def test_invalid_format(self):
+        self.assert_ok("""\
+            class Foo(object):
+                def __repr__(self):
+                    return 'foo'
+
+            foo = Foo()
+            print(f'{foo:.4f}')
+            """, raises=TypeError)
