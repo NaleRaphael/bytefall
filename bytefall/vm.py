@@ -160,3 +160,7 @@ class VirtualMachinePy36(VirtualMachine):
             return dis.opname[opcode], (arg,)
 
         return dis.opname[opcode], ()
+
+
+class VirtualMachinePy37(VirtualMachinePy36):
+    ...

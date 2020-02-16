@@ -789,20 +789,7 @@ class OperationPy36(OperationPy35):
 
     def CALL_FUNCTION_KW(frame, oparg):
         kwnames = frame.pop()
-        nkwargs = len(kwnames)
-        nargs = oparg - nkwargs
-        kwvals = frame.popn(nkwargs)
-        namedargs = dict(zip(kwnames, kwvals))
-        posargs = frame.popn(nargs)
-        func = frame.pop()
-
-        fn = getattr(func, '__name__', None)
-        if fn == 'locals':
-            frame.push(frame.f_locals)
-        elif fn == 'globals':
-            frame.push(frame.f_globals)
-        else:
-            frame.push(func(*posargs, **namedargs))
+        return call_function_kw(frame, oparg, kwnames)
 
     def CALL_FUNCTION_EX(frame, oparg):
         kwargs = frame.pop() if oparg & 0x01 else {}
@@ -865,12 +852,33 @@ class OperationPy36(OperationPy35):
 
 class OperationPy37(OperationPy36):
     _unsupported_ops = ['STORE_ANNOTATION']
+    # Check out bpo-32550 for details of removal of 'STORE_ANNOTATION'.
 
-    def LOAD_METHOD(frame, namei):
-        raise NotImplementedError
+    def LOAD_METHOD(frame, name):
+        obj = frame.pop()
+        meth = getattr(obj, name, None)
+        if meth == None:
+            raise AttributeError("type object '%s' has no attribute '%s'"
+                % (obj.__name__, name))
 
-    def CALL_METHOD(frame, argc):
-        raise NotImplementedError
+        # XXX: Instead of implementing something like `_PyObject_GetMethod()`,
+        # we can determine whether a method has a bounding object or not by
+        # checking the attribute `__self__`. See also:
+        # - https://github.com/python/cpython/blob/3.7/Python/ceval.c#L3040
+        # - https://github.com/python/cpython/blob/3.7/Objects/object.c#L1126-L1197
+        if hasattr(meth.__call__, '__self__'):
+            # `meth` is not an unbound method
+            frame.push(*(None, meth))
+        else:
+            frame.push(*(meth, obj))
+
+    def CALL_METHOD(frame, oparg):
+        meth = frame.peek(oparg + 1)
+        if meth is None:
+            call_function_kw(frame, oparg, [])
+            frame.pop(1)    # pop out NULL
+        else:
+            call_function_kw(frame, oparg+1, [])
 
 
 def do_raise(frame, exc, cause):
@@ -942,6 +950,29 @@ def call_function(frame, oparg, varargs, kwargs):
     # by virtual machine will return the actual information of the frame
     # executed by host runtime. To simulate the execution in the virtual
     # machine, we have to return the information of the frame we got here.
+    fn = getattr(func, '__name__', None)
+    if fn == 'locals':
+        frame.push(frame.f_locals)
+    elif fn == 'globals':
+        frame.push(frame.f_globals)
+    else:
+        frame.push(func(*posargs, **namedargs))
+
+
+def call_function_kw(frame, oparg, kwnames):
+    """Call function with names of keyword arguments.
+    This is a new implementation of `call_function` since **Py36**.
+
+    See also:
+    https://github.com/python/cpython/blob/3.6/Python/ceval.c#L4832-L4894
+    """
+    nkwargs = len(kwnames)
+    nargs = oparg - nkwargs
+    kwvals = frame.popn(nkwargs)
+    namedargs = dict(zip(kwnames, kwvals))
+    posargs = frame.popn(nargs)
+    func = frame.pop()
+
     fn = getattr(func, '__name__', None)
     if fn == 'locals':
         frame.push(frame.f_locals)
