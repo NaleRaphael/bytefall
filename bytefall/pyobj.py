@@ -371,8 +371,18 @@ def _coro_get_awaitable_iter(o):
 
 
 from asyncio import futures
-from asyncio.coroutines import _DEBUG, _CoroutineABC, _AwaitableABC
+from asyncio.coroutines import _DEBUG
 import functools, os
+
+# NOTE: in Py37, `collections.abc.Coroutine` and `collections.abc.Awaitable`
+# are import directly. To keep the same implementation for Python > 3.4, we
+# use the try-except block to handle this (which is same as the impl. in
+# module `asyncio.coroutines` for Python 3.4 ~ 3.6)
+try:
+    from collections.abc import Coroutine as _CoroutineABC, \
+                                Awaitable as _AwaitableABC
+except ImportError:
+    _CoroutineABC = _AwaitableABC = None
 
 # ----- Additional settings for coroutine in Py34
 try:
@@ -412,8 +422,7 @@ def coroutine(func):
         @functools.wraps(func)
         def coro(*args, **kw):
             res = func(*args, **kw)
-            if (isfuture(res) or isinstance(res, Generator) or
-                isinstance(res, CoroWrapper)):
+            if isfuture(res) or isinstance(res, (Generator, CoroWrapper)):
                 res = yield from res
             elif _AwaitableABC is not None:
                 try:

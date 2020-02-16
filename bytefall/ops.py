@@ -193,7 +193,7 @@ class Operation(metaclass=OperationClass):
         u = frame.pop()
         x = frame.top()
         try:
-            if isinstance(x, Generator) or isinstance(x, CoroWrapper):
+            if isinstance(x, (Generator, CoroWrapper)):
                 retval = x.send(u)
             else:
                 retval = next(x)
