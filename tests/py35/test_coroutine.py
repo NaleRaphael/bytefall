@@ -22,6 +22,8 @@ class TestCoroutine(vmtest.VmTestCase):
             print(result)
             """)
 
+    # Support for asynchronous __aiter__ is dropped in Py37. (bpo-31709)
+    @pytest.mark.skipif_py_ge((3, 7))
     def test_run_awaitable_iterator(self):
         self.assert_ok("""\
             import asyncio
@@ -49,25 +51,6 @@ class TestCoroutine(vmtest.VmTestCase):
             result = loop.run_until_complete(coro())
             print(result)
             """)
-
-        # # py36
-        # # GET_AITER
-        # self.assert_ok("""\
-        #     import asyncio
-
-        #     class Foo:
-        #         async def __aiter__(self):
-        #             yield 1
-        #             yield 2
-
-        #     async def coro():
-        #         async for v in Foo():
-        #             print(v)
-
-        #     loop = asyncio.get_event_loop()
-        #     result = loop.run_until_complete(coro())
-        #     print(result)
-        #     """)
 
     def test_not_awaited_coroutine(self):
         # TODO: catch warning
