@@ -565,7 +565,6 @@ class OperationPy35(OperationPy34):
 
         # NOTE: __aiter__ should return asynchronous iterators since CPython 3.5.2
         # see also bpo-27243
-        # TODO: Drop support for asynchronous __aiter__ in Py37 (bpo-31709)
         if hasattr(_iter, '__anext__'):
             wrapper = CoroWrapper(obj).__aiter__()
             frame.push(wrapper)
@@ -853,6 +852,30 @@ class OperationPy36(OperationPy35):
 class OperationPy37(OperationPy36):
     _unsupported_ops = ['STORE_ANNOTATION']
     # Check out bpo-32550 for details of removal of 'STORE_ANNOTATION'.
+
+    def GET_AITER(frame):
+        # NOTE: Support for asynchronous __aiter__ is dropped in Py37. (bpo-31709)
+        # We should return an `<asynchronous iterator>` directly instead of an
+        # awaitable that could resolve to an `<asynchronous iterator>`.
+        obj = frame.pop()
+        _iter = None
+        if hasattr(obj, '__aiter__'):
+            _iter = obj.__aiter__()
+            if _iter is None:
+                frame.push(None)
+                # TODO: chech whether this is a correct exception to be returned
+                raise ValueError('No asynchronous iterator availale')
+        else:
+            frame.push(None)
+            raise TypeError("'async for' requires an object with __aiter__ "
+                "method, got %s" % obj.__class__.__name__)
+
+        if not hasattr(_iter, '__anext__'):
+            frame.push(None)
+            raise TypeError("'async for' received an object from __aiter__ "
+                "that does not implement __anext__: %s" % _iter.__class__.__name__)
+
+        frame.push(_iter)
 
     def LOAD_METHOD(frame, name):
         obj = frame.pop()
