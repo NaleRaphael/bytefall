@@ -8,7 +8,11 @@ from inspect import isclass as inspect_isclass
 
 from .pycell import Cell
 from .pyframe import Frame
-from .pyobj import Function, Generator, CoroWrapper, _gen_yf, _coro_get_awaitable_iter
+from .pyobj import (
+    Function, Generator, CoroWrapper, Coroutine, AsyncGenerator,
+    AsyncGenASend, AIterWrapper, AsyncGenWrappedValue,
+    _gen_yf, _coro_get_awaitable_iter
+)
 from .exceptions import VirtualMachineError
 from .cache import GlobalCache
 from ._utils import get_vm
@@ -51,7 +55,7 @@ def exception_match(x, y):
     - `x` equals to `y`
     - `x` is a subclass/instance of `y`
 
-    Note that `BaseException` should considered.
+    Note that `BaseException` should be considered.
 
     e.g. `GeneratorExit` is a subclass of `BaseException` but which is not a
     subclass of `Exception`, and it is technically not an error.
@@ -193,7 +197,7 @@ class Operation(metaclass=OperationClass):
         u = frame.pop()
         x = frame.top()
         try:
-            if isinstance(x, (Generator, CoroWrapper)):
+            if isinstance(x, (Generator, Coroutine)):
                 retval = x.send(u)
             else:
                 retval = next(x)
@@ -566,9 +570,8 @@ class OperationPy35(OperationPy34):
         # NOTE: __aiter__ should return asynchronous iterators since CPython 3.5.2
         # see also bpo-27243
         if hasattr(_iter, '__anext__'):
-            wrapper = CoroWrapper(obj).__aiter__()
-            frame.push(wrapper)
-            return
+            wrapper = AIterWrapper(_iter)
+            return frame.push(wrapper)
 
         awaitable = _coro_get_awaitable_iter(_iter)
         if awaitable is None:
@@ -587,6 +590,12 @@ class OperationPy35(OperationPy34):
 
     def GET_ANEXT(frame):
         aiter = frame.top()
+        if isinstance(aiter, AsyncGenerator):
+            awaitable = aiter.__anext__()
+            if awaitable is None:
+                raise ValueError('Not a valid asynchronous iterator')
+            return frame.push(awaitable)
+
         if hasattr(aiter, '__anext__'):
             next_iter = aiter.__anext__()
             if next_iter is None:
@@ -621,8 +630,8 @@ class OperationPy35(OperationPy34):
         val = frame.pop()
         _iter = _coro_get_awaitable_iter(val)
 
-        if isinstance(_iter, CoroWrapper):
-            yf = _gen_yf(_iter)
+        if isinstance(_iter, (CoroWrapper, Coroutine)):
+            yf = _gen_yf(_iter.gen)
             if yf is not None:
                 raise RuntimeError('coroutine is being awaited already')
         frame.push(_iter)
@@ -759,6 +768,13 @@ class OperationPy36(OperationPy35):
     _unsupported_ops = [
         'CALL_FUNCTION_VAR', 'CALL_FUNCTION_VAR_KW', 'MAKE_CLOSURE',
     ]
+
+    def YIELD_VALUE(frame):
+        retval = frame.pop()
+        if frame.f_code.co_flags & 0x0200:    # CO_ASYNC_GENERATOR = 0x0200
+            retval = AsyncGenWrappedValue(retval)
+        GlobalCache().set('return_value', retval)
+        return 'yield'
 
     def SETUP_ANNOTATIONS(frame):
         if frame.f_locals is None:

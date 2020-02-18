@@ -16,7 +16,7 @@ class TestCoroutine(vmtest.VmTestCase):
         self.assert_ok("""\
             import asyncio
 
-            class foo:
+            class SimpleAsyncIterartor:
                 def __init__(self, stop):
                     self.i = 0
                     self.stop = stop
@@ -27,12 +27,13 @@ class TestCoroutine(vmtest.VmTestCase):
                 async def __anext__(self):
                     if self.i < self.stop:
                         self.i += 1
+                        await asyncio.sleep(0.001)
                         return self.i
                     else:
                         raise StopAsyncIteration
 
             async def coro():
-                async for v in foo(3):
+                async for v in SimpleAsyncIterartor(3):
                     print(v)
 
             loop = asyncio.get_event_loop()

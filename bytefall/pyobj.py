@@ -110,11 +110,14 @@ class Function(object):
         CO_GENERATOR = 0x0020
         CO_COROUTINE = 0x0080
         CO_ITERABLE_COROUTINE = 0x0100
+        CO_ASYNC_GENERATOR = 0x0200
 
-        if self.__code__.co_flags & (CO_GENERATOR | CO_COROUTINE):
+        if self.__code__.co_flags & (CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR):
             gen = Generator(frame)
-            if self.__code__.co_flags & (CO_COROUTINE | CO_ITERABLE_COROUTINE):
-                gen = CoroWrapper(gen)
+            if self.__code__.co_flags & CO_COROUTINE:
+                gen = Coroutine(gen)
+            elif self.__code__.co_flags & CO_ASYNC_GENERATOR:
+                gen = AsyncGenerator(gen)
             frame.generator = gen
             retval = gen
         else:
@@ -137,85 +140,10 @@ class Generator(object):
         return self.send(None)
 
     def send(self, value=None, exc=None):
-        if self.gi_running:
-            raise ValueError('generator already executing')
-        if self._finished:
-            raise StopIteration
-        if self.gi_frame.f_lasti == 0 and value is not None:
-            raise TypeError("Can't send non-None value to a just-started generator")
-        self.gi_frame.stack.append(value)
-
-        # Run frame and get returned value instantly, and `gi_running` is True
-        # only in this duration.
-        # https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L140-L142
-        self.gi_running = True
-        val = None
-        vm = get_vm()
-        try:
-            val = vm.resume_frame(self.gi_frame, exc=exc)
-        finally:
-            self.gi_running = False
-
-        # NOTE: our implementation is different from CPython here.
-        # In CPython, `gi_frame.f_stacktop` is used to check whether a generator
-        # is exhausted or not.
-        # https://github.com/python/cpython/blob/3.5/Python/ceval.c#L1191
-        # https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L152
-        if self._finished:
-            raise StopIteration(val)
-
-        return val
+        return gen_send_ex(self, value=value, exc=exc)
 
     def throw(self, exctype, val=None, tb=None):
-        if tb and not isinstance(tb, types.TracebackType):
-            raise TypeError('throw() third argument must be a traceback object')
-
-        yf = _gen_yf(self)
-        ret = None
-
-        if yf:
-            # XXX: cannot make sure `exctype` is actually a type?
-            if match_exception(exctype, GeneratorExit):
-                self.gi_running = True
-                err = gen_close_iter(yf)
-                self.gi_running = False
-                if err < 0:
-                    try:
-                        val = self.send(None, exc=GeneratorExit)
-                    except GeneratorExit:
-                        pass
-                    return val
-                self._finished = True
-                six.reraise(exctype, val, tb)
-            if isinstance(yf, Generator):
-                self.gi_running = True
-                try:
-                    ret = yf.throw(exctype, val, tb)
-                finally:
-                    self._finished = True
-                    self.gi_running = False
-            else:
-                meth = getattr(yf, 'throw', None)
-                if meth is None:
-                    self._finished = True
-                    six.reraise(exctype, val, tb)
-                self.gi_running = True
-                ret = meth(exctype, val, tb)
-                self.gi_running = False
-            if ret is None:
-                val = None
-                ret = self.gi_frame.pop()
-                assert ret == yf
-                self.gi_frame.f_lasti += 1
-                ret = self.send(val)
-            return ret
-        else:
-            GlobalCache().set('last_exception', (exctype, val, tb))
-            try:
-                val = self.send(None, exc=exctype)
-            finally:
-                self._finished = True
-            return val
+        return gen_throw(self, exctype, val=val, tb=tb)
 
     def close(self):
         # just call `gen_close` without returning value to make this API
@@ -266,6 +194,91 @@ def _gen_yf(gen):
     return yf
 
 
+def gen_send_ex(gen, value=None, exc=None):
+    if gen.gi_running:
+        # TODO: error message for coroutine
+        raise ValueError('generator already executing')
+    if gen._finished:
+        raise StopIteration
+    if gen.gi_frame.f_lasti == 0 and value is not None:
+        raise TypeError("Can't send non-None value to a just-started generator")
+    gen.gi_frame.stack.append(value)
+
+    # Run frame and get returned value instantly, and `gi_running` is True
+    # only in this duration.
+    # https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L140-L142
+    gen.gi_running = True
+    val = None
+    vm = get_vm()
+    try:
+        val = vm.resume_frame(gen.gi_frame, exc=exc)
+    finally:
+        gen.gi_running = False
+
+    # NOTE: our implementation is different from CPython here.
+    # In CPython, `gi_frame.f_stacktop` is used to check whether a generator
+    # is exhausted or not.
+    # https://github.com/python/cpython/blob/3.5/Python/ceval.c#L1191
+    # https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L152
+    if gen._finished:
+        raise StopIteration(val)
+
+    return val
+
+
+def gen_throw(gen, exctype, val=None, tb=None):
+    if tb and not isinstance(tb, types.TracebackType):
+        raise TypeError('throw() third argument must be a traceback object')
+
+    yf = _gen_yf(gen)
+    ret = None
+
+    if yf:
+        # XXX: cannot make sure `exctype` is actually a type?
+        if match_exception(exctype, GeneratorExit):
+            gen.gi_running = True
+            err = gen_close_iter(yf)
+            gen.gi_running = False
+            if err < 0:
+                try:
+                    val = gen.send(None, exc=GeneratorExit)
+                except GeneratorExit:
+                    pass
+                # val = gen.send(None, exc=GeneratorExit)
+                return val
+            gen._finished = True
+            six.reraise(exctype, val, tb)
+        if isinstance(yf, Generator):
+            gen.gi_running = True
+            try:
+                ret = yf.throw(exctype, val, tb)
+            finally:
+                gen._finished = True
+                gen.gi_running = False
+        else:
+            meth = getattr(yf, 'throw', None)
+            if meth is None:
+                gen._finished = True
+                six.reraise(exctype, val, tb)
+            gen.gi_running = True
+            ret = meth(exctype, val, tb)
+            gen.gi_running = False
+        if ret is None:
+            val = None
+            ret = gen.gi_frame.pop()
+            assert ret == yf
+            gen.gi_frame.f_lasti += 1
+            ret = gen.send(val)
+        return ret
+    else:
+        GlobalCache().set('last_exception', (exctype, val, tb))
+        try:
+            val = gen.send(None, exc=exctype)
+        finally:
+            gen._finished = True
+        return val
+
+
 def gen_close(gen):
     """Interal helper function to close a generator.
 
@@ -313,11 +326,17 @@ def gen_close_iter(gen):
 
 def gen_is_coroutine(o):
     # CO_ITERABLE_COROUTINE = 0x0080
-    return isinstance(o, Generator) and bool(o.gi_code.co_flags & 0x0080)
+    return (
+        isinstance(o, (Generator, types.GeneratorType)) and
+        bool(o.gi_code.co_flags & 0x0080)
+    )
 
 def gen_is_iterable_coroutine(o):
     # CO_ITERABLE_COROUTINE = 0x0100
-    return isinstance(o, Generator) and bool(o.gi_code.co_flags & 0x0100)
+    return (
+        isinstance(o, (Generator, types.GeneratorType)) and
+        bool(o.gi_code.co_flags & 0x0100)
+    )
 
 
 class CoroWrapper(_CoroWrapper):
@@ -329,6 +348,7 @@ class CoroWrapper(_CoroWrapper):
         self.gen = gen
         self.func = func
         self._source_traceback = traceback.extract_stack(sys._getframe(1))
+        self.cw_coroutine = None
         self.__name__ = getattr(gen, '__name__', None)
         self.__qualname__ = getattr(gen, '__qualname__', None)
 
@@ -347,13 +367,13 @@ def _coro_get_awaitable_iter(o):
     Corresponding impl.:
     https://github.com/python/cpython/blob/3.5/Objects/genobject.c#L783-L823
     """
-    if issubclass(type(o), CoroWrapper) or gen_is_iterable_coroutine(o):
+    if isinstance(o, (Coroutine, CoroWrapper)) or gen_is_iterable_coroutine(o):
         return o
 
     if hasattr(o, '__await__'):
         res = o.__await__()
         if res:
-            if isinstance(res, CoroWrapper) or gen_is_coroutine(res):
+            if isinstance(o, (Coroutine, CoroWrapper)) or gen_is_coroutine(res):
                 raise TypeError('__await__() returned a coroutine')
             else:
                 try:
@@ -448,3 +468,269 @@ def coroutine(func):
 
     wrapper._is_coroutine = _is_coroutine  # For iscoroutinefunction().
     return wrapper
+
+
+class Coroutine(object):
+    """Coroutine. (PyCoroObject)
+
+    Corresponding impl.:
+    https://github.com/python/cpython/blob/3.6/Objects/genobject.c#L933-L1047
+    """
+    def __init__(self, gen):
+        self.gen = gen
+        self.cr_frame = self.gen.gi_frame
+        self.cr_running = self.gen.gi_running
+        self.cr_code = self.gen.gi_code
+
+    def __await__(self):
+        cw = CoroWrapper(self.gen)
+        cw.cw_coroutine = self
+        return cw
+
+    @property
+    def cr_await(self):
+        return _gen_yf(self)
+
+    @property
+    def _finished(self):
+        return self.gen._finished
+
+    @_finished.setter
+    def _finished(self, value):
+        self.gen._finished = value
+
+    def send(self, value=None):
+        return gen_send_ex(self.gen, value)
+
+    def throw(self, exctype, val=None, tb=None):
+        return gen_throw(self.gen, exctype, val=val, tb=tb)
+
+    def close(self):
+        gen_close(self.gen)
+
+
+from enum import Enum
+class AwaitableState(Enum):
+    AWAITABLE_STATE_INIT = 0
+    AWAITABLE_STATE_ITER = 1
+    AWAITABLE_STATE_CLOSED = 3
+
+
+class AsyncGenerator(object):
+    """Async generator. (PyAsyncGenObject)
+
+    See also: https://www.python.org/dev/peps/pep-0525/#implementation-details
+
+    Corresponding impl.:
+    https://github.com/python/cpython/blob/3.6/Objects/genobject.c#L1355-L1502
+    """
+    def __init__(self, gen):
+        self.gen = gen
+        self.ag_code = self.gen.gi_code
+        self.ag_frame = self.gen.gi_frame
+        self.ag_running = self.gen.gi_running
+        self.ag_closed = False
+
+    def __aiter__(self):
+        return self
+
+    def __anext__(self):
+        return AsyncGenASend(self.gen, None)
+
+    @property
+    def ag_await(self):
+        return _gen_yf(self)
+
+    @property
+    def _finished(self):
+        return self.gen._finished
+
+    @_finished.setter
+    def _finished(self, value):
+        self.gen._finished = value
+
+    def asend(self, value=None):
+        return AsyncGenASend(self.gen, value)
+
+    def aclose(self):
+        return AsyncGenAThrow(self.gen, arg)
+
+    def athrow(self):
+        return AsyncGenAThrow(self.gen, None)
+
+
+class AsyncGenASend(object):
+    """Async generator Asend awaitable. (PyAsyncGenAsendObject)
+    This is an awaitable object that implements `__anext__()` and `asend()` methods
+    of `AsyncGenerator`.
+
+    Corresponding impl.:
+    https://github.com/python/cpython/blob/3.6/Objects/genobject.c#L1588-L1735
+    """
+    def __init__(self, gen, sendval):
+        self.ags_gen = gen
+        self.ags_state = AwaitableState.AWAITABLE_STATE_INIT
+        self.ags_sendval = sendval
+
+    def __next__(self):
+        return self.send(None)
+
+    def send(self, value=None):
+        if self.ags_state == AwaitableState.AWAITABLE_STATE_CLOSED:
+            raise StopIteration(None)
+        if self.ags_state == AwaitableState.AWAITABLE_STATE_INIT:
+            if value is None:
+                value = self.ags_sendval
+            self.ags_state = AwaitableState.AWAITABLE_STATE_ITER
+
+        result, exc = None, None
+        try:
+            result = gen_send_ex(self.ags_gen, value)
+        except (Exception, BaseException) as e:
+            exc = e
+
+        try:
+            result = async_gen_unwrap_value(self.ags_gen, result, exc=exc)
+        finally:
+            if result is None:
+                self.ags_state = AwaitableState.AWAITABLE_STATE_CLOSED
+        return result
+
+    def throw(self, *args, **kwargs):
+        if self.ags_state == AwaitableState.AWAITABLE_STATE_CLOSED:
+            raise StopIteration(None)
+
+        result, exc = None, None
+        try:
+            result = gen_throw(self.ags_gen, *args, **kwargs)
+        except (Exception, BaseException) as e:
+            exc = e
+
+        try:
+            result = async_gen_unwrap_value(self.ags_gen, result, exc=exc)
+        finally:
+            if result is None:
+                self.ags_state = AwaitableState.AWAITABLE_STATE_CLOSED
+        return None
+
+    def close(self):
+        self.ags_state = AwaitableState.AWAITABLE_STATE_CLOSED
+
+
+class AsyncGenAThrow(object):
+    """Async generator AThrow awaitable. (PyAsyncGenThrowObject)
+    This is an awaitable object that implements `athrow()` and `aclose()` methods
+    of `AsyncGenerator`.
+
+    Corresponding impl.:
+    https://github.com/python/cpython/blob/3.6/Objects/genobject.c#L1854-L2078
+    """
+    def __init__(self, gen, args):
+        self.agt_gen = gen
+        self.agt_args = args
+        self.agt_state = AwaitableState.AWAITABLE_STATE_INIT
+
+    def __next__(self):
+        return self.send(None)
+
+    def send(self, value=None):
+        gen = self.agt_gen
+        f = gen.gi_frame
+        retval = None
+
+        if f is None or self.agt_state == AwaitableState.AWAITABLE_STATE_CLOSED:
+            raise StopIteration(None)
+
+        if self.agt_state == AwaitableState.AWAITABLE_STATE_INIT:
+            if gen.ag_closed:
+                raise StopIteration(None)
+            if value is None:
+                raise RuntimeError("can't send non-None value to a just-started coroutine")
+
+            self.agt_state = AwaitableState.AWAITABLE_STATE_ITER
+            if self.agt_args is None:
+                self.agt_gen.ag_closed = True
+                retval = gen_throw(gen, GeneratorExit)
+                if retval is not None and isinstance(retval, AsyncGenWrappedValue):
+                    raise RuntimeError('async generator ignored GeneratorExit')
+            else:
+                retval = None
+                try:
+                    retval = gen_throw(gen, *self.agt_args)
+                except (StopAsyncIteration, GeneratorExit):
+                    self.agt_state = AwaitableState.AWAITABLE_STATE_CLOSED
+                    if self.agt_args is None:
+                        raise StopIteration
+                try:
+                    retval = async_gen_unwrap_value(self.agt_gen, retval)
+                except (StopAsyncIteration, GeneratorExit):
+                    self.agt_state = AwaitableState.AWAITABLE_STATE_CLOSED
+                    if self.agt_args is None:
+                        raise StopIteration(None)
+            return retval
+
+        assert self.agt_state == AwaitableState.AWAITABLE_STATE_ITER
+        try:
+            retval = gen_send_ex(gen, value)
+        except (StopAsyncIteration, GeneratorExit):
+            self.agt_state = AwaitableState.AWAITABLE_STATE_CLOSED
+            if self.agt_args is None:
+                raise StopIteration
+
+        if self.agt_args:
+            return async_gen_unwrap_value(self.agt_gen, retval)
+        else:
+            if retval is not None and isinstance(retval, AsyncGenWrappedValue):
+                raise RuntimeError('async generator ignored GeneratorExit')
+            return retval
+
+    def throw(self, *args, **kwargs):
+        retval = None
+        if self.agt_state == AwaitableState.AWAITABLE_STATE_INIT:
+            raise RuntimeError("can't send non-None value to a just-started coroutine")
+        if self.agt_state == AwaitableState.AWAITABLE_STATE_CLOSED:
+            raise StopIteration(None)
+        retval = gen_throw(self.agt_gen, *args, **kwargs)
+        if self.agt_args:
+            return async_gen_unwrap_value(self.agt_gen, retval)
+        else:
+            if isinstance(retval, AsyncGenWrappedValue):
+                raise RuntimeError('async generator ignored GeneratorExit')
+            return retval
+
+    def close(self):
+        self.agt_state = AwaitableState.AWAITABLE_STATE_CLOSED
+
+
+class AsyncGenWrappedValue(object):
+    """Async generator value wrapper. (_PyAsyncGenWrappedValue)
+    A wrapper used to wrap value which is directly yielded. (related to bytecode
+    operation `YIELD_VALUE`)
+
+    Corresponding impl.:
+    https://github.com/python/cpython/blob/3.6/Objects/genobject.c#L1764-L1829
+    """
+    def __init__(self, value):
+        self.agw_val = value
+
+
+class AIterWrapper(object):
+    """An __aiter__ wrapper.
+
+    Check out bpo-27243 for details.
+    """
+    def __init__(self, aiter):
+        self.ags_aiter = aiter
+
+    def __next__(self):
+        raise StopIteration(self.ags_aiter)
+
+
+def async_gen_unwrap_value(gen, result, exc=None):
+    if result is None:
+        if isinstance(exc, (StopAsyncIteration, GeneratorExit)):
+            gen.ag_closed = True
+        raise StopAsyncIteration(None)
+    if isinstance(result, AsyncGenWrappedValue):
+        raise StopIteration(result.agw_val)
+    return result
