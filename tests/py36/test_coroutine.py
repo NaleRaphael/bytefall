@@ -81,3 +81,53 @@ class TestCoroutine(vmtest.VmTestCase):
             result = loop.run_until_complete(coro())
             print(result)
             """)
+
+    def test_async_generator_asend(self):
+        self.assert_ok("""\
+            import asyncio
+
+            async def gen():
+                await asyncio.sleep(0.001)
+                v = yield 42
+                print(v)
+                await asyncio.sleep(0.001)
+
+            async def coro():
+                g = gen()
+
+                a = await g.asend(None)
+                try:
+                    await g.asend('hello')
+                except StopAsyncIteration:
+                    print('Async generator is stopped')
+
+            loop = asyncio.get_event_loop()
+            result = loop.run_until_complete(coro())
+            print(result)
+            """)
+
+    def test_async_generator_athrow(self):
+        self.assert_ok("""\
+            import asyncio
+
+            async def gen():
+                await asyncio.sleep(0.001)
+                v = yield 42
+                print(v)
+                await asyncio.sleep(0.001)
+
+            async def coro():
+                g = gen()
+
+                a = await g.asend(None)
+                try:
+                    await g.athrow(RuntimeError, 'manually terminate asyncgen')
+                except StopAsyncIteration:
+                    print('Async generator is stopped')
+                except RuntimeError as e:
+                    print(e)
+
+            loop = asyncio.get_event_loop()
+            result = loop.run_until_complete(coro())
+            print(result)
+            """)

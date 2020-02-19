@@ -124,6 +124,9 @@ def gen_throw(gen, exctype, val=None, tb=None):
     if tb and not isinstance(tb, types.TracebackType):
         raise TypeError('throw() third argument must be a traceback object')
 
+    if isinstance(val, str):    # XXX: wrap `val` to an Exception instance
+        val = exctype(val)
+
     yf = _gen_yf(gen)
     ret = None
 
@@ -404,7 +407,7 @@ class AsyncGenerator(object):
         return self
 
     def __anext__(self):
-        return AsyncGenASend(self.gen, None)
+        return AsyncGenASend(self, None)
 
     @property
     def ag_await(self):
@@ -419,13 +422,14 @@ class AsyncGenerator(object):
         self.gen._finished = value
 
     def asend(self, value=None):
-        return AsyncGenASend(self.gen, value)
+        return AsyncGenASend(self, value)
 
     def aclose(self):
-        return AsyncGenAThrow(self.gen, arg)
+        return AsyncGenAThrow(self, None)
 
-    def athrow(self):
-        return AsyncGenAThrow(self.gen, None)
+    def athrow(self, *args):
+        # args: exctype[,value[,traceback]]
+        return AsyncGenAThrow(self, args)
 
 
 class AsyncGenASend(object):
@@ -444,7 +448,14 @@ class AsyncGenASend(object):
     def __next__(self):
         return self.send(None)
 
+    def __await__(self):
+        return self
+
+    def __iter__(self):
+        return self
+
     def send(self, value=None):
+        gen = self.ags_gen.gen
         if self.ags_state == AwaitableState.AWAITABLE_STATE_CLOSED:
             raise StopIteration(None)
         if self.ags_state == AwaitableState.AWAITABLE_STATE_INIT:
@@ -454,29 +465,30 @@ class AsyncGenASend(object):
 
         result, exc = None, None
         try:
-            result = gen_send_ex(self.ags_gen, value)
+            result = gen_send_ex(gen, value)
         except (Exception, BaseException) as e:
             exc = e
 
         try:
-            result = async_gen_unwrap_value(self.ags_gen, result, exc=exc)
+            result = async_gen_unwrap_value(gen, result, exc=exc)
         finally:
             if result is None:
                 self.ags_state = AwaitableState.AWAITABLE_STATE_CLOSED
         return result
 
     def throw(self, *args, **kwargs):
+        gen = self.ags_gen.gen
         if self.ags_state == AwaitableState.AWAITABLE_STATE_CLOSED:
             raise StopIteration(None)
 
         result, exc = None, None
         try:
-            result = gen_throw(self.ags_gen, *args, **kwargs)
+            result = gen_throw(gen, *args, **kwargs)
         except (Exception, BaseException) as e:
             exc = e
 
         try:
-            result = async_gen_unwrap_value(self.ags_gen, result, exc=exc)
+            result = async_gen_unwrap_value(gen, result, exc=exc)
         finally:
             if result is None:
                 self.ags_state = AwaitableState.AWAITABLE_STATE_CLOSED
@@ -502,8 +514,14 @@ class AsyncGenAThrow(object):
     def __next__(self):
         return self.send(None)
 
+    def __await__(self):
+        return self
+
+    def __iter__(self):
+        return self
+
     def send(self, value=None):
-        gen = self.agt_gen
+        gen = self.agt_gen.gen
         f = gen.gi_frame
         retval = None
 
@@ -511,9 +529,9 @@ class AsyncGenAThrow(object):
             raise StopIteration(None)
 
         if self.agt_state == AwaitableState.AWAITABLE_STATE_INIT:
-            if gen.ag_closed:
+            if self.agt_gen.ag_closed:
                 raise StopIteration(None)
-            if value is None:
+            if value is not None:
                 raise RuntimeError("can't send non-None value to a just-started coroutine")
 
             self.agt_state = AwaitableState.AWAITABLE_STATE_ITER
