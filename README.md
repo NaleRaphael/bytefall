@@ -1,14 +1,16 @@
 # bytefall
 
 [![Build Status](https://travis-ci.com/NaleRaphael/bytefall.svg?branch=master)](https://travis-ci.com/NaleRaphael/bytefall)
+[![Python Version](https://img.shields.io/badge/python-3.5%20|%203.6%20|%203.7-orange)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-(This project is still WIP, but it currently works totally fine on Py34)
+This is a Python virtual machine implemented in pure Python and targeting Python version >= 3.4. It mainly derives from the following great works: [nedbat/byterun][nedbat_byterun] and [darius/tailbiter][darius_tailbiter].
 
-This is a Python virtual machine implemented in pure Python for version >= Py34. It mainly derives from the following great works: [nedbat/byterun][nedbat_byterun] and [darius/tailbiter][darius_tailbiter].
+In this project, complete bytecode operations are implemented. And the structure of implementation is modified to make it more easily be extended for multiple versions of Python.
 
-In this project, more complete bytecode operations are implemented. And the structure of implementation is modified to make it more easily be extended for multiple version of Python.
+Besides, operations related to `asyncio` is also supported.
 
-More features for debugging bytecode are going to be implemented, because I'm trying to use this tool to fix some bugs in my own project [bytejection][bytejection].
+More features for debugging bytecode are going to be implemented, because I'm also trying to use this tool to fix some bugs in my own project [bytejection][bytejection].
 
 ## Installation
 ```bash
@@ -16,6 +18,10 @@ $ pip install git+https://github.com/NaleRaphael/bytefall.git
 ```
 
 ## Usage
+Currently, version of virtual machine is automatically chosen according to your base Python runtime. Because it requires a base runtime to compile Python code to bytecode.
+
+Therefore, you may need to create different virtual environment with the version of Python runtime you want to run this virtual machine.
+
 ```bash
 $ python -m bytefall [YOUR_SCRIPT.py]
 ```
@@ -28,12 +34,12 @@ $ python -m pytest ./tests/
 $ python -m pytest ./tests/ --runslow
 ```
 
-[nedbat_byterun]: https://github.com/nedbat/byterun
-[darius_tailbiter]: https://github.com/darius/tailbiter
-[bytejection]: https://github.com/naleraphael/bytejection
-
 ## Development
 - You can run `bytefall` with an argument `--debug` to get more details about the failure
     ```bash
     $ python -m bytefall --debug [YOUR_SCRIPT.py]
     ```
+
+[nedbat_byterun]: https://github.com/nedbat/byterun
+[darius_tailbiter]: https://github.com/darius/tailbiter
+[bytejection]: https://github.com/naleraphael/bytejection
