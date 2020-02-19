@@ -8,9 +8,10 @@ from inspect import isclass as inspect_isclass
 
 from .pycell import Cell
 from .pyframe import Frame
-from .pyobj import (
-    Function, Generator, CoroWrapper, Coroutine, AsyncGenerator,
-    AsyncGenASend, AIterWrapper, AsyncGenWrappedValue,
+from .pyobj import Function
+from .pygenobj import (
+    Generator, Coroutine, AsyncGenerator,
+    AIterWrapper, AsyncGenWrappedValue,
     _gen_yf, _coro_get_awaitable_iter
 )
 from .exceptions import VirtualMachineError
@@ -396,7 +397,7 @@ class Operation(metaclass=OperationClass):
         # XXX: In order to make the decorator `asyncio.coroutine` works normally
         # in our virtual machine, replace it with our implementation.
         if name == 'asyncio':
-            from .pyobj import coroutine
+            from .pygenobj import coroutine
             val.coroutine = coroutine
             val.coroutines.coroutine = coroutine
 
@@ -630,7 +631,7 @@ class OperationPy35(OperationPy34):
         val = frame.pop()
         _iter = _coro_get_awaitable_iter(val)
 
-        if isinstance(_iter, (CoroWrapper, Coroutine)):
+        if isinstance(_iter, Coroutine):
             yf = _gen_yf(_iter.gen)
             if yf is not None:
                 raise RuntimeError('coroutine is being awaited already')
