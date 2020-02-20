@@ -144,6 +144,16 @@ class VirtualMachinePy35(VirtualMachinePy34):
 
 
 class VirtualMachinePy36(VirtualMachine):
+    def run_code(self, code, f_globals=None, f_locals=None):
+        if f_globals is None: f_globals = builtins.globals()
+        if f_locals is None:  f_locals = f_globals
+        if '__builtins__' not in f_globals:
+            f_globals['__builtins__'] = builtins.__dict__
+        if '__annotations__' not in f_globals:
+            f_globals['__annotations__'] = {}
+        frame = Frame(code, f_globals, f_locals, None, None)
+        return self.run(frame)
+
     def parse_byte_and_args(self, arg_offset=0):
         f = self.frame
         code = f.f_code
