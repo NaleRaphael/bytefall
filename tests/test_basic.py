@@ -277,13 +277,6 @@ class TestIt(vmtest.VmTestCase):
             a, b, *vals = range(1)
             """, raises=ValueError)
 
-    def test_exec_statement(self):
-        self.assert_ok("""\
-            g = {}
-            exec("a = 11", g, g)
-            assert g['a'] == 11
-            """)
-
     def test_jump_if_true_or_pop(self):
         self.assert_ok("""\
             def f(a, b):
@@ -413,3 +406,27 @@ class TestComparisons(vmtest.VmTestCase):
             assert "z" > "a"
             assert "z" >= "a" and "z" >= "z"
             """)
+
+
+class TestExec(vmtest.VmTestCase):
+    def test_exec_statement(self):
+        self.assert_ok("""\
+            g = {}
+            exec('a = 11', g, g)
+            assert g['a'] == 11
+            """)
+
+    def test_variable_declaration(self):
+        self.assert_ok("""\
+            g = globals()
+            exec('x = 1', g, g)
+            print(x)
+            """)
+
+    def test_function_declaration(self):
+        stmt = "\"def fn(): return 'wow'\""
+        self.assert_ok("""\
+            g = globals()
+            exec({stmt}, g, g)
+            print(fn())
+            """.format(stmt=stmt))

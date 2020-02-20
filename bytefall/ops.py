@@ -17,6 +17,7 @@ from .pygenobj import (
 from .exceptions import VirtualMachineError
 from .cache import GlobalCache
 from ._utils import get_vm
+from ._compat import BuiltinsWrapper
 
 
 UNARY_OPERATORS = {
@@ -986,15 +987,10 @@ def call_function(frame, oparg, varargs, kwargs):
 
     # XXX: This is a temporary workaround to skip checking on some builtin
     # functions which may lack `__name__`, e.g. `functools.partial`.
-    # XXX: Calling `locals()` and `globals()` in the script to be executed
-    # by virtual machine will return the actual information of the frame
-    # executed by host runtime. To simulate the execution in the virtual
-    # machine, we have to return the information of the frame we got here.
-    fn = getattr(func, '__name__', None)
-    if fn == 'locals':
-        frame.push(frame.f_locals)
-    elif fn == 'globals':
-        frame.push(frame.f_globals)
+    fn = getattr(func, '__name__', '')
+    if hasattr(BuiltinsWrapper, fn):
+        func = getattr(BuiltinsWrapper, fn)
+        frame.push(func(frame, *posargs, **namedargs))
     else:
         frame.push(func(*posargs, **namedargs))
 
@@ -1013,11 +1009,10 @@ def call_function_kw(frame, oparg, kwnames):
     posargs = frame.popn(nargs)
     func = frame.pop()
 
-    fn = getattr(func, '__name__', None)
-    if fn == 'locals':
-        frame.push(frame.f_locals)
-    elif fn == 'globals':
-        frame.push(frame.f_globals)
+    fn = getattr(func, '__name__', '')
+    if hasattr(BuiltinsWrapper, fn):
+        func = getattr(BuiltinsWrapper, fn)
+        frame.push(func(frame, *posargs, **namedargs))
     else:
         frame.push(func(*posargs, **namedargs))
 

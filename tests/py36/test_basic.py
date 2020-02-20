@@ -84,3 +84,13 @@ class TestFString(vmtest.VmTestCase):
             foo = Foo()
             print(f'{foo:.4f}')
             """, raises=TypeError)
+
+
+class TestExec(vmtest.VmTestCase):
+    def test_class_annotations(self):
+        self.assert_ok("""\
+            class C:
+                exec('x: int')
+            print(C.__annotations__)
+            print(__annotations__)
+            """, globs=globals(), locs=locals())
