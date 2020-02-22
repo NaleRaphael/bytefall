@@ -277,7 +277,7 @@ class Operation(metaclass=OperationClass):
             if why == 'silenced':
                 block = frame.pop_block()
                 assert block.type == 'except-handler'
-                frame.unwind_block(block)
+                frame.unwind_except_handler(block)
                 why = None
         elif v is None:
             why = None
@@ -285,18 +285,18 @@ class Operation(metaclass=OperationClass):
             exctype = v
             val = frame.pop()
             tb = frame.pop()
+            # PyErr_Restore
             GlobalCache().set('last_exception', (exctype, val, tb))
-            why = 'reraise'
+            why = 'exception'
         else:
             raise VirtualMachineError("Confused END_FINALLY")
         return why
-
 
     def POP_EXCEPT(frame):
         block = frame.block_stack.pop()
         if block.type != 'except-handler':
             raise VirtualMachineError('popped block is not an except handler')
-        frame.unwind_block(block)
+        frame.unwind_except_handler(block)
 
     def STORE_NAME(frame, name):
         frame.f_locals[name] = frame.pop()
@@ -924,7 +924,9 @@ class OperationPy37(OperationPy36):
 
 def do_raise(frame, exc, cause):
     if exc is None:
-        exc_type, val, tb = GlobalCache().get('last_exception')
+        exc_type, val, tb = GlobalCache().get('new_exception', (type(None), None, None))
+        # PyErr_Restore
+        GlobalCache().set('last_exception', (exc_type, val, tb))
         return 'exception' if exc_type is None else 'reraise'
     elif type(exc) == type:
         exc_type = exc
@@ -942,6 +944,7 @@ def do_raise(frame, exc, cause):
             return 'exception'
         val.__cause__ = cause
 
+    # PyErr_SetObject (PyErr_Restore)
     GlobalCache().set('last_exception', (exc_type, val, val.__traceback__))
     return 'exception'
 

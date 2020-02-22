@@ -146,3 +146,167 @@ class TestExceptions(vmtest.VmTestCase):
             print(l)
             assert l == [0, 'f', 'e', 1, 'f', 'e', 2, 'f', 'e', 'r']
             """)
+
+    def test_nested_try_catch_raise_runtimeerror(self):
+        self.assert_ok("""\
+            def fn():
+                try:
+                    try:
+                        try:
+                            print('--- try_1')
+                            raise RuntimeError
+                        except RuntimeError:
+                            print('--- except_1 for RuntimeError')
+                            # no raising here
+                        except ValueError:
+                            print('--- except_1 for ValueError')
+                            raise
+                        finally:
+                            print('--- finally_1')
+                    except:
+                        print('--- except_2')
+                        raise
+                    finally:
+                        print('--- finally_2')
+                except RuntimeError:
+                    print('--- except_3 for RuntimeError')
+                    return 'exc3-RuntimeError'
+                except ValueError:
+                    print('--- except_3 for ValueError')
+                    return 'exc3-ValueError'
+                finally:
+                    print('---finally_3')
+            print(fn())
+            """)
+
+    def test_nested_try_catch_raise_valueerror(self):
+        self.assert_ok("""\
+            def fn():
+                try:
+                    try:
+                        try:
+                            print('--- try_1')
+                            raise ValueError
+                        except RuntimeError:
+                            print('--- except_1 for RuntimeError')
+                            # no raising here
+                        except ValueError:
+                            print('--- except_1 for ValueError')
+                            raise
+                        finally:
+                            print('--- finally_1')
+                    except:
+                        print('--- except_2')
+                        raise
+                    finally:
+                        print('--- finally_2')
+                except RuntimeError:
+                    print('--- except_3 for RuntimeError')
+                    return 'exc3-RuntimeError'
+                except ValueError:
+                    print('--- except_3 for ValueError')
+                    return 'exc3-ValueError'
+                finally:
+                    print('---finally_3')
+            print(fn())
+            """)
+
+    def test_nested_try_catch_return_in_finally(self):
+        self.assert_ok("""\
+            def fn():
+                try:
+                    try:
+                        try:
+                            print('--- try_1')
+                            raise ValueError
+                        except RuntimeError:
+                            print('--- except_1 for RuntimeError')
+                            # no raise here
+                        except ValueError:
+                            print('--- except_1 for ValueError')
+                            raise
+                        finally:
+                            print('--- finally_1')
+                    except:
+                        print('--- except_2')
+                        raise
+                    finally:
+                        print('--- finally_2')
+                        return 'return from finally_2'  # <--- here
+                except RuntimeError:
+                    print('--- except_3 for RuntimeError')
+                    return 'exc3-RuntimeError'
+                except ValueError:
+                    print('--- except_3 for ValueError')
+                    return 'exc3-ValueError'
+                finally:
+                    print('---finally_3')
+            print(fn())
+            """)
+
+    def test_nested_try_catch_raise_in_finally(self):
+        self.assert_ok("""\
+            def fn():
+                try:
+                    try:
+                        try:
+                            print('--- try_1')
+                            raise ValueError
+                        except RuntimeError:
+                            print('--- except_1 for RuntimeError')
+                            # no raise here
+                        except ValueError:
+                            print('--- except_1 for ValueError')
+                            raise
+                        finally:
+                            print('--- finally_1')
+                    except:
+                        print('--- except_2')
+                        raise
+                    finally:
+                        print('--- finally_2')
+                        # Here: raise another exception
+                        raise RuntimeError('RuntimeError raised from finally_2')
+                except RuntimeError:
+                    print('--- except_3 for RuntimeError')
+                    return 'exc3-RuntimeError'
+                except ValueError:
+                    print('--- except_3 for ValueError')
+                    return 'exc3-ValueError'
+                finally:
+                    print('---finally_3')
+            print(fn())
+            """)
+
+    def test_nested_try_catch_return_in_except(self):
+        self.assert_ok("""\
+            def fn():
+                try:
+                    try:
+                        try:
+                            print('--- try_1')
+                            raise ValueError
+                        except RuntimeError:
+                            print('--- except_1 for RuntimeError')
+                            # no raise here
+                        except ValueError:
+                            print('--- except_1 for ValueError')
+                            raise
+                        finally:
+                            print('--- finally_1')
+                    except:
+                        print('--- except_2')
+                        return 'terminate from except_2'  # <--- here
+                    finally:
+                        print('--- finally_2')
+                        raise RuntimeError('RuntimeError raised from finally_2')
+                except RuntimeError:
+                    print('--- except_3 for RuntimeError')
+                    return 'exc3-RuntimeError'
+                except ValueError:
+                    print('--- except_3 for ValueError')
+                    return 'exc3-ValueError'
+                finally:
+                    print('---finally_3')
+            print(fn())
+            """)

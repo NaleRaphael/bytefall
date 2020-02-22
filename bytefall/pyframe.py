@@ -81,12 +81,17 @@ class Frame(object):
         return self.block_stack.pop()
 
     def unwind_block(self, block):
-        offset = 3 if block.type == 'except-handler' else 0
-        self.popn(len(self.stack) - (block.level+offset))
+        while len(self.stack) > block.level:
+            self.pop()
 
-        if block.type == 'except-handler':
-            tb, value, exctype = self.popn(3)
-            GlobalCache().set('last_exception', (exctype, value, tb))
+    def unwind_except_handler(self, block):
+        while len(self.stack) > block.level + 3:
+            self.pop()
+        tb, value, exctype = self.popn(3)
+        # NOTE: 'new_exception' denotes the current exception hold by vm.
+        # (like `tstate->exc_type` ... in CPython)
+        # 'last_exception' denotes the exception should be raised.
+        GlobalCache().set('new_exception', (exctype, value, tb))
 
     def manage_block_stack(self, why):
         """ Manage a frame's block stack.
@@ -102,6 +107,9 @@ class Frame(object):
             return why
 
         self.pop_block()
+        if block.type == 'except-handler':
+            self.unwind_except_handler(block)
+            return why
         self.unwind_block(block)
 
         if block.type == 'loop' and why == 'break':
@@ -114,10 +122,19 @@ class Frame(object):
             block.type in ['setup-except', 'finally']
         ):
             self.push_block('except-handler')
-            exctype, value, tb = GlobalCache().get('last_exception')
+
+            # in CPython, we retrieve exception from tstate and push to stack here
+            exctype, value, tb = GlobalCache().get('new_exception', (type(None), None, None))
             self.push(tb, value, exctype)
+
             # PyErr_NormalizeException goes here
+
+            # like `PyErr_Fetch`: get last_exception and clear it from GlobalCache
+            exctype, value, tb = GlobalCache().pop('last_exception', (type(None), None, None))
             self.push(tb, value, exctype)
+
+            # in CPython, we update the exception in tstate with fetched one
+            GlobalCache().set('new_exception', (exctype, value, tb))
             why = None
             self.jump(block.handler)
             return why
