@@ -534,11 +534,11 @@ class Operation(metaclass=OperationClass):
 
     def SET_ADD(frame, count):
         val = frame.pop()
-        frame[-count].add(val)
+        frame.stack[-count].add(val)
 
     def MAP_ADD(frame, count):
         val, key = frame.popn(2)
-        frame[-count][key] = val
+        frame.stack[-count][key] = val
 
     def LOAD_CLASSDEREF(frame, name):   # new in py34
         frame.push(frame.cells[name].contents)
@@ -674,7 +674,7 @@ class OperationPy35(OperationPy34):
             frame.push('silenced')
 
     def BUILD_MAP(frame, size):
-        # changed in version 3.5
+        # changed in Py35
         items = [frame.popn(2) for i in range(size)]
         frame.push(dict(items))
 
@@ -898,7 +898,7 @@ class OperationPy37(OperationPy36):
     def LOAD_METHOD(frame, name):
         obj = frame.pop()
         meth = getattr(obj, name, None)
-        if meth == None:
+        if meth is None:
             raise AttributeError("type object '%s' has no attribute '%s'"
                 % (obj.__name__, name))
 
@@ -928,7 +928,7 @@ class OperationPy38(OperationPy37):
     ]
 
     def WITH_CLEANUP_FINISH(frame):
-        # NOTE: this is changed in Py38, and `WHY_SILENCED` is removed.
+        # Changed in Py38, and `WHY_SILENCED` is removed.
         u, exit_ret = frame.popn(2)
         err = (u is not None) and bool(exit_ret)
         if err < 0:
@@ -947,6 +947,11 @@ class OperationPy38(OperationPy37):
         assert block.level + 3 <= num_stack <= block.level + 4
         tb, value, exctype = frame.popn(3)
         GlobalCache().set('new_exception', (exctype, value, tb))
+
+    def MAP_ADD(frame, count):
+        # Changed in Py38. Order of key and val is reversed.
+        key, val = frame.popn(2)
+        frame.stack[-count][key] = val
 
     def ROT_FOUR(frame):
         # related test case: test_with::test_generator_with_context_manager

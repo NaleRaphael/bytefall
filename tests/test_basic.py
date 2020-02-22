@@ -46,6 +46,22 @@ class TestIt(vmtest.VmTestCase):
             assert x == [0, 1, 4, 9, 16]
             """)
 
+    def test_set_comprehension(self):
+        self.assert_ok("""\
+            keys = ['a', 'b', 'c', 'd', 'e']
+            x = {k for k in keys}
+            assert all([k in x for k in keys])
+            """)
+
+    def test_dict_comprehension(self):
+        self.assert_ok("""\
+            keys = ['a', 'b', 'c', 'd', 'e']
+            vals = [97, 98, 99, 100, 101]
+            x = {k: ord(k) for k in keys}
+            for i, k in enumerate(keys):
+                assert x[k] == vals[i]
+            """)
+
     def test_unary_operators(self):
         self.assert_ok("""\
             x = 8
