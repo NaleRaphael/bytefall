@@ -1,7 +1,7 @@
 # bytefall
 
 [![Build Status](https://travis-ci.com/NaleRaphael/bytefall.svg?branch=master)](https://travis-ci.com/NaleRaphael/bytefall)
-[![Python Version](https://img.shields.io/badge/python-3.5%20|%203.6%20|%203.7-orange)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.4%20|%203.5%20|%203.6%20|%203.7%20|%203.8-orange)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 This is a Python virtual machine implemented in pure Python and targeting Python version >= 3.4. It mainly derives from the following great works: [nedbat/byterun][nedbat_byterun] and [darius/tailbiter][darius_tailbiter].
