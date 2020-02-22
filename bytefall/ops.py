@@ -293,9 +293,9 @@ class Operation(metaclass=OperationClass):
         return why
 
     def POP_EXCEPT(frame):
-        block = frame.block_stack.pop()
+        block = frame.pop_block()
         if block.type != 'except-handler':
-            raise VirtualMachineError('popped block is not an except handler')
+            raise SystemError('popped block is not an except handler')
         frame.unwind_except_handler(block)
 
     def STORE_NAME(frame, name):
@@ -920,6 +920,94 @@ class OperationPy37(OperationPy36):
             frame.pop(1)    # pop out NULL
         else:
             call_function_kw(frame, oparg+1, [])
+
+
+class OperationPy38(OperationPy37):
+    _unsupported_ops = [
+        'BREAK_LOOP', 'CONTINUE_LOOP', 'SETUP_LOOP', 'SETUP_EXCEPT'
+    ]
+
+    def WITH_CLEANUP_FINISH(frame):
+        # NOTE: this is changed in Py38, and `WHY_SILENCED` is removed.
+        u, exit_ret = frame.popn(2)
+        err = (u is not None) and bool(exit_ret)
+        if err < 0:
+            return 'exception'
+        elif err > 0:
+            block = frame.pop_block()
+            assert block.type == 'except-handler'
+            frame.unwind_except_handler(block)
+            frame.push(None)
+
+    def POP_EXCEPT(frame):
+        block = frame.pop_block()
+        if block.type != 'except-handler':
+            raise SystemError('popped block is not an except handler')
+        num_stack = len(frame.stack)
+        assert block.level + 3 <= num_stack <= block.level + 4
+        tb, value, exctype = frame.popn(3)
+        GlobalCache().set('new_exception', (exctype, value, tb))
+
+    def ROT_FOUR(frame):
+        # related test case: test_with::test_generator_with_context_manager
+        a, b, c, d = frame.popn(4)
+        frame.push(b, c, d, a)
+
+    def BEGIN_FINALLY(frame):
+        frame.push(None)
+
+    def END_FINALLY(frame):
+        exc = frame.pop()
+        if exc is None:
+            return
+        elif isinstance(exc, int):
+            # `exc` should be a line number to jump to
+            last_exception = GlobalCache().get('last_exception', None)
+            if exc == 0 and last_exception is not None:
+                return 'exception'
+            frame.jump(exc)
+        else:
+            assert issubclass(exc, BaseException)
+            tb, val = frame.popn(2)
+            # PyErr_Restore
+            GlobalCache().set('last_exception', (exc, val, tb))
+            return 'exception'
+
+    def END_ASYNC_FOR(frame):
+        exc = frame.pop()
+        assert issubclass(exc, BaseException)
+        if exception_match(exc, StopAsyncIteration):
+            block = frame.pop_block()
+            assert block.type == 'except-handler'
+            frame.unwind_except_handler(block)
+            frame.pop()
+            # XXX: no oparg here, but there is an expression
+            # `JUMPBY(opargs)` in CPython...
+            return
+        else:
+            tb, val = frame.popn(2)
+            GlobalCache().set('last_exception', (exc, val, tb))
+            return 'exception'
+
+    def CALL_FINALLY(frame, oparg):
+        # value to be pushed: INSTR_OFFSET()
+        frame.push(frame.f_lasti)
+        # jump to 'finally' block
+        frame.jump(oparg)
+
+    def POP_FINALLY(frame, preserve_tos):
+        res = frame.pop() if preserve_tos else None
+        exc = frame.pop()
+        if exc:
+            frame.popn(2)
+            block = frame.pop_block()
+            if block.type != 'except-handler':
+                raise SystemError('popped block is not an except handler')
+            assert len(frame.stack) == block.level + 3
+            tb, value, exctype = frame.popn(3)
+            GlobalCache().set('new_exception', (exctype, value, tb))
+        if preserve_tos:
+            frame.push(res)
 
 
 def do_raise(frame, exc, cause):

@@ -174,3 +174,7 @@ class VirtualMachinePy36(VirtualMachine):
 
 class VirtualMachinePy37(VirtualMachinePy36):
     ...
+
+
+class VirtualMachinePy38(VirtualMachinePy36):
+    ...
