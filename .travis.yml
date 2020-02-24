@@ -1,34 +1,33 @@
 language: python
-
-sudo: false
+os: linux
+python:
+  - 3.4
+  - 3.5
+  - 3.6
+  - 3.7
+  - 3.8
 
 cache:
   directories:
     - $HOME/.cache/pip
   pip: true
 
-matrix:
+jobs:
   include:
-  - name: "Python 3.4"
-    python: 3.4
-  - name: "Python 3.5"
-    python: 3.5
-  - name: "Python 3.6"
-    python: 3.6
-  - name: "Python 3.7"
-    python: 3.7
-  - name: "Python 3.8"
-    python: 3.8
+    - stage: combine coverage files
+      python: 3.7
+      script: .travis/gen_report.sh
 
 before_cache:
   - rm -f $HOME/.cache/pip/log/debug.log
 
 before_install:
   - pip install -U pytest
+  - pip install -U pytest-cov
 
 install:
   - pip install .
 
 script:
   # run all tests including those cases may take long time
-  - python -m pytest ./tests/ --runslow
+  - .travis/runtests.sh

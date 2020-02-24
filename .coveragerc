@@ -1,0 +1,19 @@
+[run]
+omit =
+    tests/*
+    bytefall/__main__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    def __str__
+    if 0
+    if __name__ == '__main__'
+    raise NotImplementedError
+
+ignore_errors = True
+
+[html]
+directory = coverage_html_report
+
