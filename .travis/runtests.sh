@@ -6,6 +6,7 @@ PY_VER=`python -c \
         print('py%s%s' % (ver.major, ver.minor))"`
 GIT_BRANCH="cov-$PY_VER"
 COVERAGE_FILE=".coverage.$PY_VER"
+MODULE_NAME="bytefall"  # XXX: variable for "run_tests_with_coverage"
 
 THIS_DIR=`dirname $0`
 source "$THIS_DIR"/utils.sh

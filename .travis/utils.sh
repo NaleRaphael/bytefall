@@ -54,9 +54,10 @@ push_artifacts() {
 
 run_tests_with_coverage() {
     local coverage_file=${COVERAGE_FILE:-".coverage"}
+    local module_name=$MODULE_NAME
     COVERAGE_FILE="$coverage_file" python -mpytest \
         --cov-config=.coveragerc \
-        --cov=modfoo \
+        --cov=$module_name \
         ./tests/ "$@"
 }
 
