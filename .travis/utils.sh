@@ -22,10 +22,9 @@ check_branch_exists() {
 
 create_branch_for_coverage() {
     local branch=$1
-    local message=$2
     git checkout -q --orphan "$branch"
     git rm -rf -q .
-    git commit -q --allow-empty -m "$message"
+    git commit -q --allow-empty -m "root commit for coverage file"
     git push -q -u origin "$branch"
     git checkout -q master
 }
