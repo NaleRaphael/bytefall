@@ -26,7 +26,7 @@ class Frame(object):
             if hasattr(self.f_builtins, '__dict__'):
                 self.f_builtins = self.f_builtins.__dict__
 
-        self.f_lineno = f_code.co_firstlineno
+        self._f_lineno = f_code.co_firstlineno
         self.f_lasti = 0
 
         self.cells = {} if f_code.co_cellvars or f_code.co_freevars else None
@@ -41,10 +41,13 @@ class Frame(object):
 
         self.block_stack = []
         self.generator = None
+        self.f_trace = None
 
     def __repr__(self):
-        return ('<Frame at 0x%08x: %r @ %d>'
-                % (id(self), self.f_code.co_filename, self.f_lineno))
+        return ('<Frame at 0x%016X, file %r, line %d, code %s>' % (
+            id(self), self.f_code.co_filename, self.f_lineno,
+            self.f_code.co_name
+        ))
 
     def top(self):
         return self.stack[-1]
@@ -149,3 +152,27 @@ class Frame(object):
             return why
 
         return why
+
+    @property
+    def f_lineno(self):
+        lineno = _get_lineno(self)
+        self._f_lineno = lineno + self.f_code.co_firstlineno
+        return self._f_lineno
+
+
+def _get_lineno(frame):
+    """ Get current line number where the execution stopping.
+
+    See also cpython/Objects/lnotab_notes.txt for further details.
+    """
+    target = frame.f_lasti
+    lineno = addr = 0
+    lnotab = frame.f_code.co_lnotab
+    for addr_incr, line_incr in zip(lnotab[::2], lnotab[1::2]):
+        addr += addr_incr
+        if addr > target:
+            return lineno
+        if line_incr >= 0x80:
+            line_incr -= 0x100
+        lineno += line_incr
+    return lineno
