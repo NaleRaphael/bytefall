@@ -1,18 +1,6 @@
-from ..exceptions import VirtualMachineError
-from ..pyframe import Frame
+from .utils import check_frame
 
 __all__ = ['BuiltinsWrapper']
-
-
-def check_frame(func):
-    def wrapper(frame, *args, **kwargs):
-        if not isinstance(frame, Frame):
-            raise VirtualMachineError(
-                'Given argument `frame`: "%s" is not a instance of %s'
-                % (frame, Frame)
-            )
-        return func(frame, *args, **kwargs)
-    return wrapper
 
 
 class BuiltinsWrapper(object):

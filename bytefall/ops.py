@@ -6,6 +6,10 @@ from __future__ import print_function, division
 import dis, operator
 from inspect import isclass as inspect_isclass
 
+import os
+DEBUG_INTERNAL = int(os.environ.get('DEBUG_INTERNAL', 0))
+del os
+
 from .pycell import Cell
 from .pyframe import Frame
 from .pyobj import Function
@@ -17,7 +21,9 @@ from .pygenobj import (
 from .exceptions import VirtualMachineError
 from .cache import GlobalCache
 from ._utils import get_vm
-from ._compat import BuiltinsWrapper
+
+# TODO: merge these two modules
+from ._compat import BuiltinsWrapper, PdbWrapper
 
 
 UNARY_OPERATORS = {
@@ -1087,6 +1093,13 @@ def call_function(frame, oparg, varargs, kwargs):
     if hasattr(BuiltinsWrapper, fn):
         func = getattr(BuiltinsWrapper, fn)
         frame.push(func(frame, *posargs, **namedargs))
+    elif hasattr(PdbWrapper, fn):
+        if not DEBUG_INTERNAL:  # use wrapper instead
+            func = getattr(PdbWrapper, fn)
+            func(frame, *posargs, **namedargs)
+        else:
+            func()
+        frame.push(None)
     else:
         frame.push(func(*posargs, **namedargs))
 
@@ -1109,6 +1122,13 @@ def call_function_kw(frame, oparg, kwnames):
     if hasattr(BuiltinsWrapper, fn):
         func = getattr(BuiltinsWrapper, fn)
         frame.push(func(frame, *posargs, **namedargs))
+    elif hasattr(PdbWrapper, fn):
+        if not DEBUG_INTERNAL:  # use wrapper instead
+            func = getattr(PdbWrapper, fn)
+            func(frame, *posargs, **namedargs)
+        else:
+            func()
+        frame.push(None)
     else:
         frame.push(func(*posargs, **namedargs))
 

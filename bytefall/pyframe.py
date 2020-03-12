@@ -42,6 +42,8 @@ class Frame(object):
         self.block_stack = []
         self.generator = None
         self.f_trace = None
+        self.f_trace_lines = True     # for tracing per line in source code
+        self.f_trace_opcodes = False  # for tracing per bytecode instruction
 
     def __repr__(self):
         return ('<Frame at 0x%016X, file %r, line %d, code %s>' % (

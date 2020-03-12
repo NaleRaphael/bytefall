@@ -12,7 +12,7 @@ import dis, builtins, sys
 import six
 
 from ._base import Singleton
-from ._utils import get_operations
+from ._utils import get_operations, check_line_number
 from .cache import GlobalCache
 from .pyframe import Frame
 from .exceptions import VirtualMachineError
@@ -53,6 +53,8 @@ class VirtualMachine(metaclass=Singleton):
     def run(self, frame, exc=None):
         self.push_frame(frame)
         why = None
+        _call_trace_protected(self.frame, 'call', None)
+
         while True:
             if exc is not None:
                 why = 'exception'
@@ -69,8 +71,7 @@ class VirtualMachine(metaclass=Singleton):
                 why = self.dispatch(byte_name, arguments)
                 continue
             if why == 'exception':
-                # TODO: ceval calls PyTraceBack_Here, not sure what that does.
-                pass
+                _call_exc_trace(self.frame)
             if why == 'reraise':
                 why = 'exception'
             if why != 'yield':
@@ -79,11 +80,21 @@ class VirtualMachine(metaclass=Singleton):
             if why:
                 break
 
+        func = GlobalCache().get('tracefunc', None)
+        obj = GlobalCache().get('traceobj', None)
+        retval = GlobalCache().get('return_value', None)
+
+        if why in ['return', 'yield']:
+            if _call_trace(func, obj, self.frame, 'return', retval):
+                why = 'exception'
+        elif why == 'exception':
+            _call_trace_protected(self.frame, 'return', None)
+
         self.pop_frame()
         if why == 'exception':
             six.reraise(*GlobalCache().get('last_exception'))
 
-        return GlobalCache().get('return_value')
+        return retval
 
     def push_frame(self, frame):
         self.frames.append(frame)
@@ -103,7 +114,16 @@ class VirtualMachine(metaclass=Singleton):
         raise NotImplementedError
 
     def dispatch(self, byte_name, arguments):
+        """ Dispatch opcode.
+
+        Equivalent to the block defined as `dispatch_opcode` in "ceval.c".
+        """
         why = None
+
+        # In CPython, `maybe_call_line_trace` is called in the block defined by
+        # `fast_next_opcode` label, which is a former block of `dispatch_opcode`.
+        _maybe_call_line_trace(self.frame)
+
         try:
             prefix, *rem = byte_name.split('_')
             if prefix in ['UNARY', 'BINARY', 'INPLACE']:
@@ -178,3 +198,90 @@ class VirtualMachinePy37(VirtualMachinePy36):
 
 class VirtualMachinePy38(VirtualMachinePy36):
     ...
+
+
+def settrace(func, arg):
+    """ Setup trace function. (`ceval.c::PyEval_SetTrace`) """
+    GlobalCache().set('tracefunc', func)  # _trace_trampoline
+    GlobalCache().set('traceobj', arg)    # a Python callback function
+    GlobalCache().set('use_tracing', func is not None)
+
+
+def _call_trace(func, obj, frame, what, arg=None):
+    """ Call trace function. (`ceval.c::calltrace`) """
+    tracing = GlobalCache().get('tracing', False)
+    if tracing or func is None:
+        return
+
+    GlobalCache().set('tracing', True)
+    GlobalCache().set('use_tracing', False)
+    result = func(obj, frame, what, arg)
+
+    # Here we get the trace function directly in case it is uninstalled by
+    # `sys.settrace(None)`.
+    temp = GlobalCache().get('tracefunc', None)
+    GlobalCache().set('use_tracing', temp is not None)
+    GlobalCache().set('tracing', False)
+    return result
+
+
+def _call_trace_protected(frame, what, arg=None):
+    """ Call trace function with exception handling.
+    (`ceval.c::call_trace_protected`)
+    """
+    use_tracing = GlobalCache().get('use_tracing', False)
+    func = GlobalCache().get('tracefunc', None)
+    obj = GlobalCache().get('traceobj', None)
+
+    if not use_tracing or func is None:
+        return
+
+    try:
+        _call_trace(func, obj, frame, what, arg)
+    except:
+        raise
+
+def _maybe_call_line_trace(frame):
+    """ Used to trigger the callback function to trace per line in source
+    code or bytecode instruction.
+    """
+    tracing = GlobalCache().get('tracing', False)
+    func = GlobalCache().get('tracefunc', None)
+    obj = GlobalCache().get('traceobj', None)
+
+    # Check whether we are tracing now. If true, we should avoid calling
+    # trace function again.
+    if tracing or func is None:
+        return
+
+    # Get lower & upper bound of instructions corresponding to line number
+    line, lb, ub = check_line_number(frame.f_code, frame.f_lasti)
+
+    result = 0
+    if frame.f_lasti == lb and frame.f_trace_lines:
+        result = _call_trace(func, obj, frame, 'line', None)
+    if frame.f_trace_opcodes:
+        result = _call_trace(func, obj, frame, 'opcode', None)
+
+    # Reload possibly changed frame fields
+    frame.jump(frame.f_lasti)
+
+    return result
+
+def _call_exc_trace(frame):
+    """ Used to trigger the callback function for tracing while there is
+    an error occuring.
+    """
+    func = GlobalCache().get('tracefunc', None)
+    obj = GlobalCache().get('traceobj', None)
+
+    if func is None:
+        return
+
+    # PyErr_Fetch
+    arg = GlobalCache().pop('last_exception', (type(None), None, None))
+
+    _call_trace(func, obj, frame, 'exception', arg)
+
+    # PyErr_Restore
+    GlobalCache().set('last_exception', arg)
