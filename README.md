@@ -40,6 +40,11 @@ $ python -m pytest ./tests/ --runslow
     $ python -m bytefall --debug [YOUR_SCRIPT.py]
     ```
 
+- To explore the internal execution of virtual machine with `pdb`, you can run it with an environment variable `DEBUG_INTERNAL`
+    ```bash
+    $ DEBUG_INTERNAL=1 python -m bytefall [YOUR_SCRIPT.py]
+    ```
+
 [nedbat_byterun]: https://github.com/nedbat/byterun
 [darius_tailbiter]: https://github.com/darius/tailbiter
 [bytejection]: https://github.com/naleraphael/bytejection
