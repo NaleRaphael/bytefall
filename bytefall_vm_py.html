@@ -64,11 +64,11 @@
     <p id="t11" class="run"><span class="n"><a href="#t11">11</a></span><span class="t"><span class="key">import</span> <span class="nam">dis</span><span class="op">,</span> <span class="nam">builtins</span><span class="op">,</span> <span class="nam">sys</span>&nbsp;</span><span class="r"></span></p>
     <p id="t12" class="run"><span class="n"><a href="#t12">12</a></span><span class="t"><span class="key">import</span> <span class="nam">six</span>&nbsp;</span><span class="r"></span></p>
     <p id="t13" class="pln"><span class="n"><a href="#t13">13</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
-    <p id="t14" class="run"><span class="n"><a href="#t14">14</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">_base</span> <span class="key">import</span> <span class="nam">Singleton</span>&nbsp;</span><span class="r"></span></p>
-    <p id="t15" class="run"><span class="n"><a href="#t15">15</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">_utils</span> <span class="key">import</span> <span class="nam">get_operations</span><span class="op">,</span> <span class="nam">check_line_number</span>&nbsp;</span><span class="r"></span></p>
-    <p id="t16" class="run"><span class="n"><a href="#t16">16</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">cache</span> <span class="key">import</span> <span class="nam">GlobalCache</span>&nbsp;</span><span class="r"></span></p>
-    <p id="t17" class="run"><span class="n"><a href="#t17">17</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">pyframe</span> <span class="key">import</span> <span class="nam">Frame</span>&nbsp;</span><span class="r"></span></p>
-    <p id="t18" class="run"><span class="n"><a href="#t18">18</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">exceptions</span> <span class="key">import</span> <span class="nam">VirtualMachineError</span>&nbsp;</span><span class="r"></span></p>
+    <p id="t14" class="run"><span class="n"><a href="#t14">14</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">_internal</span><span class="op">.</span><span class="nam">base</span> <span class="key">import</span> <span class="nam">Singleton</span>&nbsp;</span><span class="r"></span></p>
+    <p id="t15" class="run"><span class="n"><a href="#t15">15</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">_internal</span><span class="op">.</span><span class="nam">utils</span> <span class="key">import</span> <span class="nam">get_operations</span><span class="op">,</span> <span class="nam">check_line_number</span>&nbsp;</span><span class="r"></span></p>
+    <p id="t16" class="run"><span class="n"><a href="#t16">16</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">_internal</span><span class="op">.</span><span class="nam">cache</span> <span class="key">import</span> <span class="nam">GlobalCache</span>&nbsp;</span><span class="r"></span></p>
+    <p id="t17" class="run"><span class="n"><a href="#t17">17</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">_internal</span><span class="op">.</span><span class="nam">exceptions</span> <span class="key">import</span> <span class="nam">VirtualMachineError</span>&nbsp;</span><span class="r"></span></p>
+    <p id="t18" class="run"><span class="n"><a href="#t18">18</a></span><span class="t"><span class="key">from</span> <span class="op">.</span><span class="nam">objects</span><span class="op">.</span><span class="nam">frameobject</span> <span class="key">import</span> <span class="nam">Frame</span>&nbsp;</span><span class="r"></span></p>
     <p id="t19" class="pln"><span class="n"><a href="#t19">19</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
     <p id="t20" class="pln"><span class="n"><a href="#t20">20</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
     <p id="t21" class="pln"><span class="n"><a href="#t21">21</a></span><span class="t"><span class="com"># build a map for opcodes that defined in `dis.hasconst`, `dis.hasfree`, ...</span>&nbsp;</span><span class="r"></span></p>
@@ -342,8 +342,8 @@
 <div id="footer">
     <div class="content">
         <p>
-            <a class="nav" href="index.html">&#xab; index</a> &nbsp; &nbsp; <a class="nav" href="https://coverage.readthedocs.io">coverage.py v5.0.3</a>,
-            created at 2020-03-12 16:51
+            <a class="nav" href="index.html">&#xab; index</a> &nbsp; &nbsp; <a class="nav" href="https://coverage.readthedocs.io">coverage.py v5.0.4</a>,
+            created at 2020-03-24 04:18
         </p>
     </div>
 </div>
