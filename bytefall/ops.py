@@ -6,10 +6,6 @@ from __future__ import print_function, division
 import dis, operator
 from inspect import isclass as inspect_isclass
 
-import os
-DEBUG_INTERNAL = int(os.environ.get('DEBUG_INTERNAL', 0))
-del os
-
 from .objects import Cell, Frame, Function
 from .objects.generatorobject import (
     Generator, Coroutine, AsyncGenerator, AIterWrapper, AsyncGenWrappedValue,
@@ -1084,21 +1080,7 @@ def call_function(frame, oparg, varargs, kwargs):
     posargs.extend(varargs)
     func = frame.pop()
 
-    # XXX: This is a temporary workaround to skip checking on some builtin
-    # functions which may lack `__name__`, e.g. `functools.partial`.
-    fn = getattr(func, '__name__', '')
-    if hasattr(BuiltinsWrapper, fn):
-        func = getattr(BuiltinsWrapper, fn)
-        frame.push(func(frame, *posargs, **namedargs))
-    elif hasattr(PdbWrapper, fn):
-        if not DEBUG_INTERNAL:  # use wrapper instead
-            func = getattr(PdbWrapper, fn)
-            func(frame, *posargs, **namedargs)
-        else:
-            func()
-        frame.push(None)
-    else:
-        frame.push(func(*posargs, **namedargs))
+    frame.push(_call_function(func, frame, *posargs, **namedargs))
 
 
 def call_function_kw(frame, oparg, kwnames):
@@ -1115,19 +1097,23 @@ def call_function_kw(frame, oparg, kwnames):
     posargs = frame.popn(nargs)
     func = frame.pop()
 
+    frame.push(_call_function(func, frame, *posargs, **namedargs))
+
+
+def _call_function(func, frame, *posargs, **namedargs):
+    # XXX: This is a temporary workaround to skip checking on some builtin
+    # functions which may lack `__name__`, e.g. `functools.partial`.
     fn = getattr(func, '__name__', '')
+
     if hasattr(BuiltinsWrapper, fn):
         func = getattr(BuiltinsWrapper, fn)
-        frame.push(func(frame, *posargs, **namedargs))
+        retval = func(frame, *posargs, **namedargs)
     elif hasattr(PdbWrapper, fn):
-        if not DEBUG_INTERNAL:  # use wrapper instead
-            func = getattr(PdbWrapper, fn)
-            func(frame, *posargs, **namedargs)
-        else:
-            func()
-        frame.push(None)
+        func = getattr(PdbWrapper, fn)
+        retval = func(frame, *posargs, **namedargs)
     else:
-        frame.push(func(*posargs, **namedargs))
+        retval = func(*posargs, **namedargs)
+    return retval
 
 
 def build_class(func, name, *bases, **kwds):

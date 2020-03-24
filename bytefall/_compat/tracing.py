@@ -4,6 +4,7 @@ from pdb import Pdb, getsourcelines
 from .utils import check_frame
 from bytefall._modules import sys as py_sys
 from bytefall._c_api import convert_to_builtin_frame
+from bytefall.config import Config
 
 
 __all__ = ['PdbWrapper']
@@ -13,15 +14,20 @@ class PdbWrapper(object):
     @staticmethod
     @check_frame
     def set_trace(frame, *args, **kwargs):
-        return pdb_wrapper(frame)(*args, **kwargs)
+        return pdb_wrapper(frame)()
 
 
 def pdb_wrapper(this_frame):
-    _pdb = _Pdb()
-    def wrapper(*args, **kwargs):
-        # Frame to be stepped in is not retrieved by `sys._getframe()`,
-        # so that we don't need to pass its `f_back` into `set_trace()`
-        _pdb.set_trace(this_frame)
+    DEBUG_INTERNAL = Config().get('DEBUG_INTERNAL')
+    _pdb = Pdb() if DEBUG_INTERNAL else _Pdb()
+
+    def wrapper():
+        if DEBUG_INTERNAL:
+            _pdb.set_trace(sys._getframe(3))
+        else:
+            # Frame to be stepped in is not retrieved by `sys._getframe()`,
+            # so that we don't need to pass its `f_back` into `set_trace()`
+            _pdb.set_trace(this_frame)
 
     return wrapper
 
