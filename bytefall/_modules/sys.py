@@ -2,8 +2,8 @@
 
 Here we just implement functions related to the workflow of our vm.
 """
-from ..vm import settrace as vm_settrace
-from .._utils import get_vm
+from bytefall.vm import settrace as vm_settrace
+from bytefall._internal.utils import get_vm
 
 
 __all__ = ['settrace', '_getframe']

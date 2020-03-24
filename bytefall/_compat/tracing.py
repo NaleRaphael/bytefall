@@ -1,8 +1,9 @@
 import sys
 from pdb import Pdb, getsourcelines
+
 from .utils import check_frame
-from .._modules import sys as py_sys
-from .._c_api import convert_to_builtin_frame
+from bytefall._modules import sys as py_sys
+from bytefall._c_api import convert_to_builtin_frame
 
 
 __all__ = ['PdbWrapper']

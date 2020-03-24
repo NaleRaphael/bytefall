@@ -10,17 +10,15 @@ import os
 DEBUG_INTERNAL = int(os.environ.get('DEBUG_INTERNAL', 0))
 del os
 
-from .pycell import Cell
-from .pyframe import Frame
-from .pyobj import Function
-from .pygenobj import (
-    Generator, Coroutine, AsyncGenerator,
-    AIterWrapper, AsyncGenWrappedValue,
-    _gen_yf, _coro_get_awaitable_iter
+from .objects import Cell, Frame, Function
+from .objects.generatorobject import (
+    Generator, Coroutine, AsyncGenerator, AIterWrapper, AsyncGenWrappedValue,
+    _gen_yf, _coro_get_awaitable_iter, coroutine
 )
-from .exceptions import VirtualMachineError
-from .cache import GlobalCache
-from ._utils import get_vm
+
+from ._internal.exceptions import VirtualMachineError
+from ._internal.cache import GlobalCache
+from ._internal.utils import get_vm
 
 # TODO: merge these two modules
 from ._compat import BuiltinsWrapper, PdbWrapper
@@ -404,7 +402,6 @@ class Operation(metaclass=OperationClass):
         # XXX: In order to make the decorator `asyncio.coroutine` works normally
         # in our virtual machine, replace it with our implementation.
         if name == 'asyncio':
-            from .pygenobj import coroutine
             val.coroutine = coroutine
             val.coroutines.coroutine = coroutine
 

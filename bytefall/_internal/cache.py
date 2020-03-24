@@ -1,4 +1,4 @@
-from ._base import Singleton
+from .base import Singleton
 
 
 class GlobalCache(metaclass=Singleton):

@@ -8,7 +8,7 @@ def get_python_version_string():
 
 
 def get_operations():
-    from . import ops  # locally lazy-import to avoid circular reference
+    from bytefall import ops  # locally lazy-import to avoid circular reference
 
     name = 'OperationPy%s' % get_python_version_string()
     cls_inst = getattr(ops, name, None)
@@ -18,7 +18,7 @@ def get_operations():
 
 
 def get_vm_class():
-    from . import vm  # locally lazy-import to avoid circular reference
+    from bytefall import vm  # locally lazy-import to avoid circular reference
 
     name = 'VirtualMachinePy%s' % get_python_version_string()
     return getattr(vm, name, None)

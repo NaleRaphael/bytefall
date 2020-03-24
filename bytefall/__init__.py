@@ -1,6 +1,6 @@
-from . import exceptions
-from .exceptions import *
-from ._utils import get_vm
+from ._internal import exceptions
+from ._internal.exceptions import *
+from ._internal.utils import get_vm
 from . import vm
 from . import ops
 

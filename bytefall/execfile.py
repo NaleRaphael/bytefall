@@ -13,7 +13,7 @@ import sys
 import tokenize
 import builtins
 
-from ._utils import get_vm
+from ._internal.utils import get_vm
 
 NoSource = Exception
 open_source = tokenize.open

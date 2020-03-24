@@ -1,23 +1,12 @@
-from .cache import GlobalCache
-from .pyframe import Frame
-from .pygenobj import (
+from .frameobject import Frame
+from .generatorobject import (
     Generator, Coroutine, AsyncGenerator
 )
-from ._utils import get_vm
+from .methodobject import Method
+from bytefall._internal.utils import get_vm
 
 
-class Method(object):
-    def __init__(self, obj, _class, func):
-        self.__self__ = obj
-        self._class = _class
-        self.__func__ = func
-
-    def __repr__(self):
-        name = '%s.%s' % (self._class.__name__, self.__func__.__name__)
-        return '<bound method %s of %s>' % (name, self.__self__)
-
-    def __call__(self, *args, **kwargs):
-        return self.__func__(self.__self__, *args, **kwargs)
+__all__ = ['Function']
 
 
 class Function(object):

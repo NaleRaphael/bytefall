@@ -11,11 +11,11 @@ ref: https://github.com/darius/tailbiter
 import dis, builtins, sys
 import six
 
-from ._base import Singleton
-from ._utils import get_operations, check_line_number
-from .cache import GlobalCache
-from .pyframe import Frame
-from .exceptions import VirtualMachineError
+from ._internal.base import Singleton
+from ._internal.utils import get_operations, check_line_number
+from ._internal.cache import GlobalCache
+from ._internal.exceptions import VirtualMachineError
+from .objects.frameobject import Frame
 
 
 # build a map for opcodes that defined in `dis.hasconst`, `dis.hasfree`, ...

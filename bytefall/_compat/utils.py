@@ -1,4 +1,4 @@
-from ..pyframe import Frame
+from bytefall.objects.frameobject import Frame
 
 def check_frame(func):
     def wrapper(frame, *args, **kwargs):

@@ -1,10 +1,14 @@
-import collections
-from .pycell import Cell
-from .cache import GlobalCache
-from .exceptions import VirtualMachineError
+from collections import namedtuple
+
+from .cellobject import Cell
+from bytefall._internal.cache import GlobalCache
+from bytefall._internal.exceptions import VirtualMachineError
 
 
-_Namedtuple_Block = collections.namedtuple('Block', 'type, handler, level')
+__all__ = ['Block', 'Frame']
+
+
+_Namedtuple_Block = namedtuple('Block', 'type, handler, level')
 
 class Block(_Namedtuple_Block):
     __slots__ = ()
