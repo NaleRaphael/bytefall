@@ -13,6 +13,10 @@ def main():
                         'if there is an unexpected error.'))
     parser.add_argument('--show_oparg', action='store_true',
                         help='Show parsed arguments per bytecode instruction.')
+    parser.add_argument('--trace_opcode', action='store_true',
+                        help=('Enable tracing mode at the level of bytecode '
+                        'instruction. (use `pdb.set_trace()` to determine the '
+                        'entry)'))
     parser.add_argument('prog')
     parser.add_argument('args', nargs=REMAINDER)
 

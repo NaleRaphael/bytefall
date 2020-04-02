@@ -55,6 +55,16 @@ class Frame(object):
             self.f_code.co_name
         ))
 
+    def __delattr__(self, name):
+        # NOTE: `del frame.f_[ATTR_NAME]` does not remove the attribute, it clear
+        # the value indeed. (e.g. in `bdb.py::set_continue`, `del frame.f_trace`
+        # is used to clear that callback.)
+        if name in ['f_code', 'f_globals', 'f_locals', 'f_back', 'f_builtins',
+            'f_lasti', 'f_lineno', 'f_trace', 'f_trace_lines', 'f_trace_opcodes']:
+            setattr(self, name, None)
+        else:
+            delattr(self, name)
+
     def top(self):
         return self.stack[-1]
 

@@ -57,6 +57,20 @@ $ python -m pytest ./tests/ --runslow
     # ...
     ```
 
+- To trace execution of each bytecode instruction, you can run `bytefall` with `--trace_opcode`, and use `pdb.set_trace()` to determine the entry.
+    ```bash
+    $ python -m bytefall --trace_opcode [YOUR_SCRIPT.py]
+    ```
+
+    ```python
+    # YOUR_SCRIPT.py
+    def main():
+        foo()
+        import pdb; pdb.set_trace()
+        bar()   # <- entry
+        buzz()
+    ```
+
 - To explore the internal execution of virtual machine with `pdb`, you can run it with an environment variable `DEBUG_INTERNAL`
     ```bash
     $ DEBUG_INTERNAL=1 python -m bytefall [YOUR_SCRIPT.py]

@@ -1,4 +1,4 @@
-from bytefall._internal.base import Singleton
+__all__ = ['EnvConfig', 'CLIConfig']
 
 
 class BaseConfig(object):
@@ -29,6 +29,7 @@ class CLIConfig(BaseConfig):
     DEFAULTS = {
         'debug': False,
         'show_oparg': False,
+        'trace_opcode': False,
     }
     def __init__(self, cli_args=None):
         """

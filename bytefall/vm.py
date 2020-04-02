@@ -15,6 +15,7 @@ from ._internal.base import Singleton
 from ._internal.utils import get_operations, check_line_number
 from ._internal.cache import GlobalCache
 from ._internal.exceptions import VirtualMachineError
+from ._internal.tracer import OPTracer
 from .objects.frameobject import Frame
 
 
@@ -44,6 +45,7 @@ class VirtualMachine(metaclass=Singleton):
         config = config if config is not None else {}
         self._debug = config.get('debug', False)
         self._oparg_logger = _prepare_oparg_logger(config.get('show_oparg', False))
+        self._trace_opcode = config.get('trace_opcode', False)
 
     def run_code(self, code, f_globals=None, f_locals=None):
         if f_globals is None: f_globals = builtins.globals()
@@ -134,9 +136,9 @@ class VirtualMachine(metaclass=Singleton):
             if prefix in ['UNARY', 'BINARY', 'INPLACE']:
                 op = byte_name[len(prefix)+1:]
                 attr_name = '%s_operator' % prefix.lower()
-                getattr(self.cls_op, attr_name)(self.frame, op)
+                self.get_op(self.cls_op, attr_name)(self.frame, op)
             else:
-                why = getattr(self.cls_op, byte_name)(self.frame, *arguments)
+                why = self.get_op(self.cls_op, byte_name)(self.frame, *arguments)
         except:
             # raise exception directly for debugging code while developing
             if self._debug: raise
@@ -144,6 +146,24 @@ class VirtualMachine(metaclass=Singleton):
             GlobalCache().set('last_exception', last_exception)
             why = 'exception'
         return why
+
+    def get_op(self, cls_op, name):
+        target_func = getattr(cls_op, name)
+        is_tracing = GlobalCache().get('use_tracing', False)
+
+        if self._trace_opcode and is_tracing:
+            def wrapper(frame, *args, **kwargs):
+                # Since it is impossible to get the frame within a function
+                # which is not executed yet, we can install a trace function in
+                # current frame but make the tracer stop at the frame created
+                # subsequently. (see also the documentation of `OPTracer`)
+                f = sys._getframe()
+                tracer = OPTracer()
+                tracer.set_trace(f)
+                target_func(frame, *args, **kwargs)
+            return wrapper
+        else:
+            return target_func
 
 
 class VirtualMachinePy34(VirtualMachine):
@@ -246,6 +266,7 @@ def _call_trace_protected(frame, what, arg=None):
     except:
         raise
 
+
 def _maybe_call_line_trace(frame):
     """ Used to trigger the callback function to trace per line in source
     code or bytecode instruction.
@@ -272,6 +293,7 @@ def _maybe_call_line_trace(frame):
     frame.jump(frame.f_lasti)
 
     return result
+
 
 def _call_exc_trace(frame):
     """ Used to trigger the callback function for tracing while there is
