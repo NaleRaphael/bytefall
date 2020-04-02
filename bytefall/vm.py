@@ -36,11 +36,14 @@ COLLECTION_PROCESS = {
 
 
 class VirtualMachine(metaclass=Singleton):
-    def __init__(self, debug=False):
+    def __init__(self, config=None):
         self.frames = []
         self.frame = None
         self.cls_op = get_operations()  # local lazy-import to avoid circular reference
-        self._debug = debug     # for development
+
+        config = config if config is not None else {}
+        self._debug = config.get('debug', False)
+        self._oparg_logger = _prepare_oparg_logger(config.get('show_oparg', False))
 
     def run_code(self, code, f_globals=None, f_locals=None):
         if f_globals is None: f_globals = builtins.globals()
@@ -61,13 +64,15 @@ class VirtualMachine(metaclass=Singleton):
                 exc = None
             elif why is None:
                 byte_name, arguments = self.parse_byte_and_args()
+                self._oparg_logger(byte_name, arguments, self.frame)
                 why = self.dispatch(byte_name, arguments)
 
             if why == 'extended_arg':
-                # NOTE: index of argument is too big to be represented in 2 byte, so
-                # it is extended by operation `EXTENDED_ARG`
+                # NOTE: for those operations requires additional byte for
+                # argument representation.
                 arg_offset = GlobalCache().pop('oparg')
                 byte_name, arguments = self.parse_byte_and_args(arg_offset=arg_offset)
+                self._oparg_logger(byte_name, arguments, self.frame)
                 why = self.dispatch(byte_name, arguments)
                 continue
             if why == 'exception':
@@ -285,3 +290,18 @@ def _call_exc_trace(frame):
 
     # PyErr_Restore
     GlobalCache().set('last_exception', arg)
+
+
+# TODO: make it able to load custom logger (like `conftest.py` of pytest)
+def _prepare_oparg_logger(enabled):
+    if enabled:
+        def oparg_logger(opname, oparg, frame):
+            try:
+                repr_stack = repr(frame.stack)
+            except:
+                repr_stack = '[ ... failed to parse stack ... ]'
+            print(opname, oparg, repr_stack)
+    else:
+        def oparg_logger(*args):
+            return
+    return oparg_logger

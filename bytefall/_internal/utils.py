@@ -24,11 +24,11 @@ def get_vm_class():
     return getattr(vm, name, None)
 
 
-def get_vm(debug=False):
+def get_vm(config=None):
     cls_vm = get_vm_class()
     if cls_vm is None:
         raise RuntimeError('No available version of virtual machine')
-    return cls_vm(debug=debug)
+    return cls_vm(config=config)
 
 
 def check_line_number(co, lasti):

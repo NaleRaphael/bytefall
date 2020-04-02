@@ -4,7 +4,7 @@ from pdb import Pdb, getsourcelines
 from .utils import check_frame
 from bytefall._modules import sys as py_sys
 from bytefall._c_api import convert_to_builtin_frame
-from bytefall.config import Config
+from bytefall.config import EnvConfig
 
 
 __all__ = ['PdbWrapper']
@@ -18,7 +18,7 @@ class PdbWrapper(object):
 
 
 def pdb_wrapper(this_frame):
-    DEBUG_INTERNAL = Config().get('DEBUG_INTERNAL')
+    DEBUG_INTERNAL = EnvConfig().get('DEBUG_INTERNAL')
     _pdb = Pdb() if DEBUG_INTERNAL else _Pdb()
 
     def wrapper():

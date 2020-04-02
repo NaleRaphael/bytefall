@@ -8,7 +8,7 @@ This is a Python virtual machine implemented in pure Python and targeting Python
 
 In this project, complete bytecode operations are implemented. And the structure of implementation is modified to make it more easily be extended for multiple versions of Python.
 
-Besides, operations related to `asyncio` is also supported.
+Besides, operations related to `asyncio` are also supported.
 
 More features for debugging bytecode are going to be implemented, because I'm also trying to use this tool to fix some bugs in my own project [bytejection][bytejection].
 
@@ -34,10 +34,27 @@ $ python -m pytest ./tests/
 $ python -m pytest ./tests/ --runslow
 ```
 
-## Development
-- You can run `bytefall` with an argument `--debug` to get more details about the failure
+## Features
+- You can run `bytefall` with an argument `--debug` to get detailed traceback of an unexpected error
     ```bash
     $ python -m bytefall --debug [YOUR_SCRIPT.py]
+    ```
+
+- To show detailed information of each bytecode instruction which is going to be executed, you can run `bytefall` with `--show_oparg`.
+    ```bash
+    $ python -m bytefall --show_oparg [YOUR_SCRIPT.py]
+    ```
+
+    Then you can get something like this:
+    ```raw
+    # Format:
+    # Instruction name | Arguments of instruction | Stack content on current frame
+
+    LOAD_CONST (<code object main at 0x0000021583CAC150, file "foo.py", line 2>,) []
+    LOAD_CONST ('main',) [<code object main at 0x0000021583CAC150, file "foo.py", line 2>]
+    MAKE_FUNCTION (0,) [<code object main at 0x0000021583CAC150, file "foo.py", line 2>, 'main']
+    STORE_NAME ('main',) [<Function main at 0x0000021583DDAA58>]
+    # ...
     ```
 
 - To explore the internal execution of virtual machine with `pdb`, you can run it with an environment variable `DEBUG_INTERNAL`
