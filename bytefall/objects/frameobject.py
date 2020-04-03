@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-from .cellobject import Cell
+from .cellobject import make_cell
 from bytefall._internal.cache import GlobalCache
 from bytefall._internal.exceptions import VirtualMachineError
 
@@ -36,7 +36,7 @@ class Frame(object):
         self.cells = {} if f_code.co_cellvars or f_code.co_freevars else None
         for var in f_code.co_cellvars:
             # Make a cell for the variable in our locals, or None.
-            self.cells[var] = Cell(self.f_locals.get(var))
+            self.cells[var] = make_cell(self.f_locals.get(var))
 
         # https://github.com/python/cpython/blob/3.4/Python/ceval.c#L3570-L3574
         if f_code.co_freevars:

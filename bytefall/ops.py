@@ -6,7 +6,7 @@ from __future__ import print_function, division
 import dis, operator
 from inspect import isclass as inspect_isclass
 
-from .objects import Cell, Frame, Function
+from .objects import CellType, make_cell, Frame, Function
 from .objects.generatorobject import (
     Generator, Coroutine, AsyncGenerator, AIterWrapper, AsyncGenWrappedValue,
     _gen_yf, _coro_get_awaitable_iter, coroutine
@@ -497,13 +497,13 @@ class Operation(metaclass=OperationClass):
         frame.push(frame.cells[name])
 
     def LOAD_DEREF(frame, name):
-        frame.push(frame.cells[name].contents)
+        frame.push(frame.cells[name].cell_contents)
 
     def STORE_DEREF(frame, name):
-        frame.cells[name].contents = frame.pop()
+        frame.cells[name] = make_cell(frame.pop())
 
     def DELETE_DEREF(frame, name):
-        del frame.cells[name].contents
+        del frame.cells[name].cell_contents
 
     def CALL_FUNCTION_VAR(frame, arg):
         args = frame.pop()
@@ -540,7 +540,7 @@ class Operation(metaclass=OperationClass):
         frame.stack[-count][key] = val
 
     def LOAD_CLASSDEREF(frame, name):   # new in py34
-        frame.push(frame.cells[name].contents)
+        frame.push(frame.cells[name].cell_contents)
 
     def EXTENDED_ARG(frame, count):
         GlobalCache().set('oparg', count << 16)
@@ -1137,8 +1137,8 @@ def build_class(func, name, *bases, **kwds):
     cell = vm.run(frame)
 
     cls = metaclass(name, bases, namespace)
-    if isinstance(cell, Cell):
-        cell.contents = cls
+    if isinstance(cell, CellType):
+        cell.cell_contents = cls
     return cls
 
 
