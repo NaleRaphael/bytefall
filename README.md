@@ -1,6 +1,7 @@
 # bytefall
 
 [![Build Status](https://travis-ci.com/NaleRaphael/bytefall.svg?branch=master)](https://travis-ci.com/NaleRaphael/bytefall)
+[![codecov](https://codecov.io/gh/NaleRaphael/bytefall/branch/master/graph/badge.svg)](https://codecov.io/gh/NaleRaphael/bytefall)
 [![Python Version](https://img.shields.io/badge/python-3.4%20|%203.5%20|%203.6%20|%203.7%20|%203.8-orange)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 

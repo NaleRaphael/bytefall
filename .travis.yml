@@ -12,11 +12,12 @@ cache:
     - $HOME/.cache/pip
   pip: true
 
-jobs:
-  include:
-    - stage: combine coverage files
-      python: 3.7
-      script: .travis/gen_report.sh
+# Hosting service for report is switched to codecov.io
+# jobs:
+#   include:
+#     - stage: combine coverage files
+#       python: 3.7
+#       script: .travis/gen_report.sh
 
 before_cache:
   - rm -f $HOME/.cache/pip/log/debug.log
@@ -24,10 +25,16 @@ before_cache:
 before_install:
   - pip install -U pytest
   - pip install -U pytest-cov
+  - pip install codecov
 
 install:
   - pip install .
 
 script:
-  # run all tests including those cases may take long time
-  - .travis/runtests.sh
+  # Run all tests including those cases may take long time
+  # (switch to codecov)
+  - .travis/runtests_codecov.sh
+
+after_success:
+  # Upload .coverage file
+  - codecov
