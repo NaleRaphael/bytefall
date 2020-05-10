@@ -59,6 +59,10 @@ $ python -m pytest ./tests/ --runslow
     ```
 
 - To trace execution of each bytecode instruction, you can run `bytefall` with `--trace_opcode`, and use `pdb.set_trace()` to determine the entry.
+
+    [**Try it online (repl.it)**](https://repl.it/@naleraphael/pymutabledefaults)
+
+
     ```bash
     $ python -m bytefall --trace_opcode [YOUR_SCRIPT.py]
     ```
